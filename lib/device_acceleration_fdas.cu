@@ -156,7 +156,7 @@ void acceleration_fdas(int range,
 			mem_tot_needed = mem_ffdot + mem_ffdot_cpx + mem_kern_array + mem_signals;
 		if (cmdargs.kfft)
 			mem_tot_needed = mem_ffdot + mem_kern_array + mem_signals;
-		checkCudaErrors(cudaMemGetInfo(&mfree, &mtotal));
+//		checkCudaErrors(cudaMemGetInfo(&mfree, &mtotal));
 
 		// get available memory info
 		printf( "Total memory for this device: %.2f GB\nAvailable memory on this device for data upload: %.2f GB \n", mtotal / gbyte, mfree / gbyte);
