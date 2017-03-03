@@ -77,5 +77,5 @@ void allocate_memory_gpu(FILE ***fp, size_t gpu_memory, int maxshift, int num_tc
 	//time = (float)(end_t-start_t);
 	//printf("\nGPU Malloc in: %f ", time), fflush(stdout);
 
-	gpuErrchk( cudaMemset(*&d_output, 0, *gpu_outputsize) );
+	gpuErrchk( cudaMemset((void **) d_output, 0, *gpu_outputsize) );
 }
