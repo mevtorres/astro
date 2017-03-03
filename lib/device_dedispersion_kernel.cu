@@ -19,7 +19,8 @@ __global__ void shared_dedisperse_kernel(int bin, unsigned short *d_input, float
 	int shift[UNROLLS];
 
 	ushort temp_f;
-	int local, unroll;
+	int unroll;
+	size_t local;
 
 	float findex = ( threadIdx.x * 2 );
 	float local_kernel_one[SNUMREG];
@@ -74,12 +75,12 @@ __global__ void shared_dedisperse_kernel(int bin, unsigned short *d_input, float
 	// Write the accumulators to the output array. 
 	local = ( ( ( ( blockIdx.y * SDIVINDM ) + threadIdx.y ) * ( i_t_processed_s ) ) + ( blockIdx.x * 2 * SNUMREG * SDIVINT ) ) + 2 * threadIdx.x;
 
-#pragma unroll
+	#pragma unroll
 	for (i = 0; i < SNUMREG; i++)
 	{
-		*( (float2*) ( d_output + local + ( i * 2 * SDIVINT ) ) ) = make_float2(local_kernel_one[i] / i_nchans / bin, local_kernel_two[i] / i_nchans / bin);
-//		d_output[local + (i*2*SDIVINT)    ] = (local_kernel_one[i])/i_nchans;
-//		d_output[local + (i*2*SDIVINT) + 1] = (local_kernel_two[i])/i_nchans;
+//		*( (float2*) ( d_output + local + ( i * 2 * SDIVINT ) ) ) = make_float2(local_kernel_one[i] / i_nchans / bin, local_kernel_two[i] / i_nchans / bin);
+		d_output[local + (i*2*SDIVINT)    ] = (local_kernel_one[i])/i_nchans;
+		d_output[local + (i*2*SDIVINT) + 1] = (local_kernel_two[i])/i_nchans;
 	}
 }
 

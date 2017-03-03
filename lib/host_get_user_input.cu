@@ -6,13 +6,14 @@
 #include "AstroAccelerate/params.h"
 #include "AstroAccelerate/host_help.h"
 
-void get_user_input(FILE **fp, int argc, char *argv[], int *multi_file, int *enable_debug, int *enable_analysis, int *enable_periodicity, int *enable_acceleration, int *output_dmt, int *enable_zero_dm, int *enable_zero_dm_with_outliers, int *enable_rfi, int *enable_fdas_custom_fft, int *enable_fdas_inbin, int *enable_fdas_norm, int *nboots, int *ntrial_bins, int *navdms, float *narrow, float *wide, float *aggression, int *nsearch, int **inBin, int **outBin, float *power, float *sigma_cutoff, int *range, float **user_dm_low, float **user_dm_high, float **user_dm_step)
+void get_user_input(FILE ***fp, int argc, char *argv[], int *multi_file, int *enable_debug, int *enable_analysis, int *enable_periodicity, int *enable_acceleration, int *output_dmt, int *enable_zero_dm, int *enable_zero_dm_with_outliers, int *enable_rfi, int *enable_fdas_custom_fft, int *enable_fdas_inbin, int *enable_fdas_norm, int *nboots, int *ntrial_bins, int *navdms, float *narrow, float *wide, float *aggression, int *nsearch, int **inBin, int **outBin, float *power, float *sigma_cutoff, int *range, float **user_dm_low, float **user_dm_high, float **user_dm_step)
 {
 
 	FILE *fp_in = NULL;
 
 	char string[100];
 	int i;
+	int counter=0;
 
 	//{{{ Read in the command line parameters and open the input file
 
@@ -74,8 +75,8 @@ void get_user_input(FILE **fp, int argc, char *argv[], int *multi_file, int *ena
 				*enable_fdas_inbin = 1;
 			if (strcmp(string, "fdas_norm") == 0)
 				*enable_fdas_norm = 1;
-			if (strcmp(string, "multi_file") == 0)
-				*multi_file = 1;
+//			if (strcmp(string, "multi_file") == 0)
+//				*multi_file = 1;
 			if (strcmp(string, "sigma_cutoff") == 0)
 				fscanf(fp_in, "%f", sigma_cutoff);
 			if (strcmp(string, "narrow") == 0)
@@ -96,15 +97,29 @@ void get_user_input(FILE **fp, int argc, char *argv[], int *multi_file, int *ena
 				fscanf(fp_in, "%f", power);
 			if (strcmp(string, "file") == 0)
 			{
+				counter++;
+			}
+		}
+		*multi_file = counter;
+
+		*fp = (FILE **) malloc((counter)*sizeof(FILE *));
+		counter=0;
+		rewind(fp_in);
+		while (!feof(fp_in))
+		{
+			fscanf(fp_in, "%s", string);
+			if (strcmp(string, "file") == 0)
+			{
 				fscanf(fp_in, "%s", string);
-				if (( *fp = fopen(string, "rb") ) == NULL)
+				printf("\n\n File Number:\t%d\t\t File name:\t%s", counter, string);
+				if (( (*fp)[counter] = fopen(string, "rb") ) == NULL)
 				{
 					fprintf(stderr, "Invalid data file!\n");
 					exit(0);
 				}
+				counter++;
 			}
 		}
-
 	}
 	else if (argc == 2 && strcmp(argv[1], "-help") == 0)
 	{

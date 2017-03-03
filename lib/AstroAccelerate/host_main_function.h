@@ -7,7 +7,7 @@ void main_function
 	char* argv[],
 	// Internal code variables
 	// File pointers
-	FILE *fp,
+	FILE ***fp,
 	// Counters and flags
 	int i,
 	int t,

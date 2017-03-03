@@ -11,7 +11,7 @@ int main(int argc, char* argv[])
 {
 	// Internal code variables
 	// File pointers
-	FILE *fp = NULL;
+	FILE **fp;
 	// Counters and flags
 	int i, t, dm_range;
 	int range = 0;
@@ -26,7 +26,7 @@ int main(int argc, char* argv[])
 	int enable_fdas_custom_fft = 0;
 	int enable_fdas_inbin = 0;
 	int enable_fdas_norm = 0;
-    int *inBin = NULL;
+	int *inBin = NULL;
 	int *outBin = NULL;
 	int *ndms = NULL;
 	int maxshift = 0;
@@ -97,7 +97,7 @@ int main(int argc, char* argv[])
 		nsamp, gpu_inputsize, gpu_outputsize, inputsize, outputsize);
 
 	// Reads telescope parameters from the header of the input file and then counts the number of samples in the input data file.
-	get_file_data(&fp, &nchans, &nsamples, &nsamp, &nifs, &nbits, &tsamp, &tstart,
+	get_file_data(&fp, &multi_file, &nchans, &nsamples, &nsamp, &nifs, &nbits, &tsamp, &tstart,
 	    &fch1, &foff);
 	if (enable_debug == 1)
 		debug(3, start_time, range, outBin, enable_debug, enable_analysis,
@@ -119,7 +119,7 @@ int main(int argc, char* argv[])
 		nsamp, gpu_inputsize, gpu_outputsize, inputsize, outputsize);
 
 	// Store the recorded telescope data contained in the input filterbank file in the allocated memory.
-	get_recorded_data(&fp, nsamp, nchans, nbits, &input_buffer, &inputsize);
+	get_recorded_data(&fp, multi_file, nsamp, nchans, nbits, &input_buffer, &inputsize);
 	if (enable_debug == 1)
 		debug(7, start_time, range, outBin, enable_debug, enable_analysis,
 		output_dmt, multi_file, sigma_cutoff, power, max_ndms, user_dm_low,
@@ -132,7 +132,7 @@ int main(int argc, char* argv[])
 	  argc, argv,
 	  // Internal code variables
 	  // File pointers
-	  fp,
+	  &fp,
 	  // Counters and flags
 	  i, t, dm_range, range, enable_debug, enable_analysis, enable_acceleration,
 	  enable_periodicity, output_dmt, enable_zero_dm, enable_zero_dm_with_outliers,
@@ -152,7 +152,7 @@ int main(int argc, char* argv[])
 
 	// write output here, not in the library
 
-	fclose(fp);
+//	fclose(fp);
 
 	free(output_buffer);
 
