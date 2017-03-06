@@ -39,8 +39,6 @@
 
 #include "AstroAccelerate/params.h"
 
-
-
 void main_function
 	(
 	int argc,
@@ -258,10 +256,13 @@ out_tmp = (float *) malloc(( t_processed[0][0] + maxshift ) * max_ndms * sizeof(
 	printf("\nNumber of samples processed: %ld", inc);
 	printf("\nReal-time speedup factor: %lf", ( tstart_local ) / time);
 
+
+	cudaDeviceSynchronize();
 	cudaFree(d_input);
 	cudaFree(d_output);
 	//free(out_tmp);
 	free(input_buffer);
+	cudaDeviceSynchronize();
 
 	double time_processed = ( tstart_local ) / tsamp_original;
 	double dm_t_processed = time_processed * total_ndms;
