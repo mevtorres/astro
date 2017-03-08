@@ -69,7 +69,7 @@ void get_user_input(FILE ***fp, int argc, char *argv[], int *multi_file, int *en
 				*enable_zero_dm_with_outliers = 1;
 			if (strcmp(string, "rfi") == 0)
 				*enable_rfi = 1;
-			if (strcmp(string, "fdas_custon_fft") == 0)
+			if (strcmp(string, "fdas_custom_fft") == 0)
 				*enable_fdas_custom_fft = 1;
 			if (strcmp(string, "fdas_inbin") == 0)
 				*enable_fdas_inbin = 1;
