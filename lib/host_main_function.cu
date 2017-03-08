@@ -161,10 +161,6 @@ void main_function
 	tsamp_original = tsamp;
 	maxshift_original = maxshift;
 
-float *out_tmp;
-out_tmp = (float *) malloc(( t_processed[0][0] + maxshift ) * max_ndms * sizeof(float));
-//memset(out_tmp, 0.0f, t_processed[0][0] + maxshift * (size_t) max_ndms * sizeof(float));
-
 	for (t = 0; t < num_tchunks; t++)
 	{
 		printf("\nt_processed:\t%d, %d", t_processed[0][t], t);
@@ -209,17 +205,13 @@ out_tmp = (float *) malloc(( t_processed[0][0] + maxshift ) * max_ndms * sizeof(
 
 			if (enable_acceleration == 1)
 			{
-				// gpu_outputsize = ndms[dm_range] * ( t_processed[dm_range][t] ) * sizeof(float);
-				save_data(d_output, out_tmp, gpu_outputsize);
-
 				//#pragma omp parallel for
-				for (int k = 0; k < ndms[dm_range]; k++)
-				{
-			//		memcpy(&output_buffer[dm_range][k][inc / inBin[dm_range]], &out_tmp[k * t_processed[dm_range][t]], sizeof(float) * t_processed[dm_range][t]);
-
-					save_data_offset(d_output, k * t_processed[dm_range][t], output_buffer[dm_range][k], inc / inBin[dm_range], sizeof(float) * t_processed[dm_range][t]);
+				for(int k = 0; k < ndms[dm_range]; k++) {
+					size_t offset_host = (size_t)k * (size_t)t_processed[dm_range][t];
+					size_t offset_device = (size_t)inc / (size_t)inBin[dm_range];
+					size_t size = sizeof(float) * (size_t)t_processed[dm_range][t];
+					save_data_offset(d_output, offset_host, output_buffer[dm_range][k], offset_device, size);
 				}
-			//	save_data(d_output, &output_buffer[dm_range][0][((long int)inc)/inBin[dm_range]], gpu_outputsize);
 			}
 
 			if (output_dmt == 1)
@@ -236,8 +228,6 @@ out_tmp = (float *) malloc(( t_processed[0][0] + maxshift ) * max_ndms * sizeof(
 			}
 			oldBin = inBin[dm_range];
 		}
-
-		//memset(out_tmp, 0.0f, t_processed[0][0] + maxshift * max_ndms * sizeof(float));
 
 		inc = inc + t_processed[0][t];
 		printf("\nINC:\t%ld", inc);
@@ -260,7 +250,6 @@ out_tmp = (float *) malloc(( t_processed[0][0] + maxshift ) * max_ndms * sizeof(
 	cudaDeviceSynchronize();
 	cudaFree(d_input);
 	cudaFree(d_output);
-	//free(out_tmp);
 	free(input_buffer);
 	cudaDeviceSynchronize();
 
