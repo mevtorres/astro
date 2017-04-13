@@ -196,7 +196,7 @@ void get_file_data(FILE **fp, int *nchans, int *nsamples, int *nsamp, int *nifs,
 //			printf("\nNumber of frequency channels must be divisible by 8 with 1 bit data samples\n");
 //			exit(0);
 //		}
-		int nb_bytes = *nchans/4;
+		/*int nb_bytes = *nchans/4;
 		unsigned char *temp_buffer = (unsigned char *) malloc( nb_bytes * sizeof(unsigned char));
 		total_data = 0;
 		while (!feof(*fp))
@@ -207,9 +207,26 @@ void get_file_data(FILE **fp, int *nchans, int *nsamples, int *nsamp, int *nifs,
 				exit(0);
 			}
 			total_data++;
+			if (total_data % 100000 == 0)
+			{
+				printf("\nTotal Data: %u\n", total_data);
+			}
 		}
 		*nsamp = total_data - 1;
-		free(temp_buffer);
+		free(temp_buffer);*/
+		long start_of_file = ftell(*fp);
+		if (fseek(*fp, 0, SEEK_END) != 0)
+		{
+			printf("\nError while reading file\n");
+			exit(1);
+		}
+		total_data = ftell(*fp);
+		if (total_data == (unsigned long int)-1)
+		{
+			printf("\nError while reading file - total_data = -1");
+			exit(1);
+		}
+		total_data = (total_data - start_of_file) * 4;
 	}
 	else if (( *nbits ) == 1)
 	{
