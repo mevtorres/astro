@@ -1,10 +1,20 @@
+// **************************************************************************************************************************** //
+// 	
+// 	Version of AA for Dunc et.al's GBT work - 22/05/17
+//
+// 	You must uncomment one set of the parameters below that relates to
+// 	the GPU that you are using.
+//
+// 	You can then make the code and follow instructions on configuring the input script
+// 	in <your dir>/input/GBT.txt
+//
+// 	This code is optimised for the following telescope setup:
+// 	fake -period 500 -dm 100 -snrpeak 8 -nbits 8 -nchans 4096 -tsamp 100 -tobs 60 -fch1 1800 -foff 0.195312500 > GBT.fil
+//
+// ***************************************************************************************************************************** //
+
 #define ACCMAX 350
 #define ACCSTEP 11
-#define UNROLLS 16
-#define SNUMREG 12
-#define SDIVINT 12
-#define SDIVINDM 40
-#define SFDIVINDM 40.0f
 #define CARD 0
 #define NOPSSHIFT 5
 #define NOPSLOOP 3
@@ -52,3 +62,38 @@
 #define PTBSIZEY 1
 //custom fft params (K. Adamek)
 #define TAPS 8
+
+
+
+// Remove these #define and then uncomment one set
+// of the values below (for the GPU you are using)
+
+#define UNROLLS 8
+#define SNUMREG 10
+#define SDIVINT 14
+#define SDIVINDM 40
+#define SFDIVINDM 40.0f
+
+// UNCOMMENT FOR GTX 1080Ti or Titan X
+//
+//#define UNROLLS 8
+//#define SNUMREG 10
+//#define SDIVINT 14
+//#define SDIVINDM 40
+//#define SFDIVINDM 40.0f
+
+// UNCOMMENT FOR Tesla P4
+// 
+// #define UNROLLS 16
+// #define SNUMREG 8
+// #define SDIVINT 14
+// #define SDIVINDM 40
+// #define SFDIVINDM 40.0f
+
+// UNCOMMENT FOR Tesla P100
+// 
+// #define UNROLLS 16
+// #define SNUMREG 10
+// #define SDIVINT 14
+// #define SDIVINDM 40
+// #define SFDIVINDM 40.0f

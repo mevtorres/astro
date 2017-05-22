@@ -1,0 +1,5 @@
+#define UNROLLS 32
+#define SNUMREG 10
+#define SDIVINT 14
+#define SDIVINDM 64
+#define SFDIVINDM 64.0f

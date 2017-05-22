@@ -1,0 +1,27 @@
+range	0    200  0.1  1 1
+range	200  400  0.2  1 1
+range	400  800  0.25 2 2
+range	800  1600 0.4  2 2
+range	1600 3200 0.8  4 4
+range	3200 6400 1.0  4 4
+range	6400 12800 2.0 8 8
+sigma_cutoff	6
+sigma_constant  4.0
+max_boxcar_width_in_sec 0.5
+analysis
+-acceleration
+-output_ffdot_plan
+-output_fdas_list
+-periodicity
+-output_dmt
+-zero_dm
+-zero_dm_with_outliers
+-rfi
+-threshold
+-fdas_custom_fft
+-fdas_inbin
+-fdas_norm
+debug
+-analysis_debug
+-failsafe
+file /mnt/data/filterbank/GBT.fil
