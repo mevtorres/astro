@@ -71,6 +71,10 @@ void fdas_alloc_gpu_arrays(fdas_gpuarrays *arrays,  cmd_args *cmdargs);
 
 void fdas_free_gpu_arrays(fdas_gpuarrays *arrays,  cmd_args *cmdargs);
 
+void fdas_alloc_gpu_arrays_stream(fdas_gpuarrays *arrays,  cmd_args *cmdargs);
+
+void fdas_free_gpu_arrays_stream(fdas_gpuarrays *arrays,  cmd_args *cmdargs);
+
 void fdas_create_acc_sig(fdas_new_acc_sig *acc_sig, cmd_args *cmdargs);
 
 void fdas_create_acc_kernels(cufftComplex* d_kernel, cmd_args *cmdargs );
@@ -79,11 +83,17 @@ void fdas_cuda_create_fftplans( fdas_cufftplan *fftplans, fdas_params *params);
 
 void fdas_cuda_basic(fdas_cufftplan *fftplans, fdas_gpuarrays *gpuarrays, cmd_args *cmdargs, fdas_params *params );
 
+void fdas_cuda_basic_stream(fdas_cufftplan *fftplans, fdas_gpuarrays *gpuarrays, cmd_args *cmdargs, fdas_params *params, cudaStream_t stream);
+
 void fdas_cuda_customfft(fdas_cufftplan *fftplans, fdas_gpuarrays *gpuarrays, cmd_args *cmdargs, fdas_params *params );
+
+void fdas_cuda_customfft_stream(fdas_cufftplan *fftplans, fdas_gpuarrays *gpuarrays, cmd_args *cmdargs, fdas_params *params, cudaStream_t stream);
 
 void fdas_write_list(fdas_gpuarrays *gpuarrays, cmd_args *cmdargs, fdas_params *params, float *h_MSD, float dm_low, int dm_count, float dm_step, unsigned int list_size);
 
-void fdas_write_ffdot(fdas_gpuarrays *gpuarrays, cmd_args *cmdargs, fdas_params *params, float dm_low, int dm_count, float dm_step );
+void fdas_write_ffdot(fdas_gpuarrays *gpuarrays, cmd_args *cmdargs, fdas_params *params, float dm_low, int dm_count, float dm_step);
+
+void fdas_write_ffdot_stream(fdas_gpuarrays *gpuarrays, cmd_args *cmdargs, fdas_params *params, float dm_low, int dm_count, float dm_step, cudaStream_t stream);
 
 //external presto functions
 //------------------------------

@@ -46,8 +46,10 @@ void acceleration_fdas(int range,
 	fdas_params params;
 	// fdas_new_acc_sig acc_sig;
 	cmd_args cmdargs;
-	fdas_gpuarrays gpuarrays;
-	fdas_cufftplan fftplans;
+	fdas_gpuarrays gpuarrays1, gpuarrays2;
+	fdas_cufftplan fftplans1, fftplans2;
+	cudaStream_t stream1, stream2;
+	cudaError_t res1, res2;
 	//float *acc_signal = NULL;
 	struct timeval t_start, t_end;
 	double t_gpu = 0.0, t_gpu_i = 0.0;
@@ -166,13 +168,20 @@ void acceleration_fdas(int range,
 		printf( "Total memory for this device: %.2f GB\nAvailable memory on this device for data upload: %.2f GB \n", mtotal / gbyte, mfree / gbyte);
 
 		//Allocating gpu arrays
-		gpuarrays.mem_insig = params.nsamps * sizeof(float);
-		gpuarrays.mem_rfft = params.rfftlen * sizeof(float2);
-		gpuarrays.mem_extsig = params.extlen * sizeof(float2);
-		gpuarrays.mem_ffdot = mem_ffdot;
-		gpuarrays.mem_ffdot_cpx = mem_ffdot_cpx;
-		gpuarrays.mem_ipedge = params.nblocks * 2;
-		gpuarrays.mem_max_list_size = mem_max_list_size;
+		gpuarrays1.mem_insig = params.nsamps * sizeof(float);
+		gpuarrays1.mem_rfft = params.rfftlen * sizeof(float2);
+		gpuarrays1.mem_extsig = params.extlen * sizeof(float2);
+		gpuarrays1.mem_ffdot = mem_ffdot;
+		gpuarrays1.mem_ffdot_cpx = mem_ffdot_cpx;
+		gpuarrays1.mem_ipedge = params.nblocks * 2;
+		gpuarrays1.mem_max_list_size = mem_max_list_size;
+		gpuarrays2.mem_insig = params.nsamps * sizeof(float);
+		gpuarrays2.mem_rfft = params.rfftlen * sizeof(float2);
+		gpuarrays2.mem_extsig = params.extlen * sizeof(float2);
+		gpuarrays2.mem_ffdot = mem_ffdot;
+		gpuarrays2.mem_ffdot_cpx = mem_ffdot_cpx;
+		gpuarrays2.mem_ipedge = params.nblocks * 2;
+		gpuarrays2.mem_max_list_size = mem_max_list_size;
 
 		printf("Total memory needed on GPU for arrays to process 1 DM: %.4f GB\nfloat ffdot plane (for power spectrum) = %.4f GB.\nTemplate array %.4f GB\nOne dimensional signals %.4f\n1 GB = %f",
 				(double) mem_tot_needed / gbyte, (double) (mem_ffdot) / gbyte, (double) mem_kern_array / gbyte, (double) mem_signals / gbyte, gbyte);
@@ -183,53 +192,42 @@ void acceleration_fdas(int range,
 		}
 		getLastCudaError("\nCuda Error\n");
 
-		/*
-		 * -- calculate total number of streams which can be processed
-		 * int number_dm_concurrently = (mfree / mem_tot_needed) - 1;
-		 *
-		 * -- create as many streams as we have arrays
-		 * cudaStream_t *stream_list = malloc(number_dm_concurrently * sizeof(cudaStream_t));
-		 * for (int ii = 0; ii < number_dm_concurrently; ++ii)
-		 * {
-    	 *      cudaStreamCreate(&stream_list[ii]);
-		 * }
-		 *
-		 * -- a list of arrays
-		 * gpuarrays *gpuarrays_list = malloc(number_dm_concurrently * sizeof(gpuarrays));
-		 * -- allocate memory -> create a function which uses cudaMallocHost to alloc pinned memory
-		 * for (int ii = 0; ii < number_dm_concurrently; ++ii)
-		 * {
-		 *     fdas_alloc_gpu_arrays(&gpuarrays_list[ii], &cmdargs);
-		 * 	   getLastCudaError("\nCuda Error\n");
-		 * }
-		 */
-		fdas_alloc_gpu_arrays(&gpuarrays, &cmdargs);
+		fdas_alloc_gpu_arrays_stream(&gpuarrays1, &cmdargs);
 		getLastCudaError("\nCuda Error\n");
+		fdas_alloc_gpu_arrays_stream(&gpuarrays2, &cmdargs);
+		getLastCudaError("\nCuda Error\n");
+
+		res1 = cudaStreamCreate(&stream1);
+		res2 = cudaStreamCreate(&stream2);
 
 		// Calculate kernel templates on CPU and upload-fft on GPU
 		printf("\nCreating acceleration templates with KERNLEN=%d, NKERN = %d zmax=%d... ",	KERNLEN, NKERN, ZMAX);
-
-		fdas_create_acc_kernels(gpuarrays.d_kernel, &cmdargs);
+		fdas_create_acc_kernels(gpuarrays1.d_kernel, &cmdargs);
+		getLastCudaError("\nCuda Error\n");
+		fdas_create_acc_kernels(gpuarrays2.d_kernel, &cmdargs);
+		getLastCudaError("\nCuda Error\n");
 		printf(" done.\n");
-		getLastCudaError("\nCuda Error\n");
 
-		/*
-		 * -- do the operation above for each stream
-		 * for (int ii = 0; ii < number_dm_concurrently; ++ii)
-		 * {
-		 *     fdas_create_acc_kernels(gpuarrays_list[ii].d_kernel, &cmdargs);
-		 *     getLastCudaError("\nCuda Error\n");
-		 * }
-		 *
-		 */
 		//Create cufft plans
-		fdas_cuda_create_fftplans(&fftplans, &params);
+		fdas_cuda_create_fftplans(&fftplans1, &params);
+		getLastCudaError("\nCuda Error\n");
+		fdas_cuda_create_fftplans(&fftplans2, &params);
 		getLastCudaError("\nCuda Error\n");
 
-		/*
-		 * Is 1 plan per stream needed here ?
-		 *
-		 */
+		// peak finding
+		int ibin=1;
+		if (cmdargs.inbin) ibin=2;
+		unsigned int list_size;
+		float *d_MSD1, *d_MSD2;
+		float h_MSD1[3], h_MSD2[3];
+		if ( cudaSuccess != cudaMallocHost((void**) &d_MSD1, sizeof(float)*3)) printf("Allocation error!\n");
+		unsigned int *gmem_fdas_peak_pos1;
+		if ( cudaSuccess != cudaMallocHost((void**) &gmem_fdas_peak_pos1, 1*sizeof(int))) printf("Allocation error!\n");
+		cudaMemset((void*) gmem_fdas_peak_pos1, 0, sizeof(int));
+		if ( cudaSuccess != cudaMallocHost((void**) &d_MSD2, sizeof(float)*3)) printf("Allocation error!\n");
+		unsigned int *gmem_fdas_peak_pos2;
+		if ( cudaSuccess != cudaMallocHost((void**) &gmem_fdas_peak_pos2, 1*sizeof(int))) printf("Allocation error!\n");
+		cudaMemset((void*) gmem_fdas_peak_pos2, 0, sizeof(int));
 
 		// Starting main acceleration search
 		//cudaGetLastError(); //reset errors
@@ -238,41 +236,26 @@ void acceleration_fdas(int range,
 		int iter=cmdargs.iter;
 		int titer=1;
 
-		/*
-		 * for (int ii = 0; ii < number_dm_concurrently; ++ii)
-		 * {
-		 *
-		 *
-		 */
-
 		// FFT
 		for (int i = 0; i < range; i++) {
 			processed=samps/inBin[i];
-			for (int dm_count = 0; dm_count < ndms[i] - 1; ++dm_count) {
+			for (int dm_count = 0; dm_count < 10; ++dm_count) {
 
+				/*********************************** stream1 *********************************************************/
 				//first time PCIe transfer and print timing
 				gettimeofday(&t_start, NULL); //don't time transfer
-				checkCudaErrors( cudaMemcpy(gpuarrays.d_in_signal, output_buffer[i][dm_count], processed*sizeof(float), cudaMemcpyHostToDevice));
+				checkCudaErrors( cudaMemcpyAsync(gpuarrays1.d_in_signal, output_buffer[i][dm_count], processed*sizeof(float), cudaMemcpyHostToDevice, stream1));
 
-				/*
-				 * checkCudaErrors( cudaMemcpyAsync(gpuarrays_list[i].d_in_signal, output_buffer[i][dm_count], processed*sizeof(float), cudaMemcpyHostToDevice, stream_list[ii]));
-				 *
-				 */
-
-				cudaDeviceSynchronize();
 				gettimeofday(&t_end, NULL);
 				t_gpu = (double) (t_end.tv_sec + (t_end.tv_usec / 1000000.0)  - t_start.tv_sec - (t_start.tv_usec/ 1000000.0)) * 1000.0;
 				t_gpu_i = (t_gpu /(double)titer);
-				printf("\n\nAverage vector transfer time of %d float samples (%.2f Mb) from 1000 iterations: %f ms\n\n", params.nsamps, (float)(gpuarrays.mem_insig)/mbyte, t_gpu_i);
+				printf("\n\nAverage vector transfer time of %d float samples (%.2f Mb) from 1000 iterations: %f ms\n\n", params.nsamps, (float)(gpuarrays1.mem_insig)/mbyte, t_gpu_i);
 
 				cudaProfilerStart(); //exclude cuda initialization ops
 				if(cmdargs.basic) {
 					gettimeofday(&t_start, NULL); //don't time transfer
-				    fdas_cuda_basic(&fftplans, &gpuarrays, &cmdargs, &params );
-				    /*
-				     * Same question about fftplans here
-				     */
-				    cudaDeviceSynchronize();
+				    fdas_cuda_basic_stream(&fftplans1, &gpuarrays1, &cmdargs, &params, stream1);
+
 				    gettimeofday(&t_end, NULL);
 				    t_gpu = (double) (t_end.tv_sec + (t_end.tv_usec / 1000000.0)  - t_start.tv_sec - (t_start.tv_usec/ 1000000.0)) * 1000.0;
 				    t_gpu_i = (t_gpu / (double)iter);
@@ -283,11 +266,9 @@ void acceleration_fdas(int range,
 				if (cmdargs.kfft) {
 					printf("\nMain: running FDAS with custom fft\n");
 					gettimeofday(&t_start, NULL); //don't time transfer
-					fdas_cuda_customfft(&fftplans, &gpuarrays, &cmdargs, &params);
-					/*
-					 * Same question about fftplans here
-					 */
-					cudaDeviceSynchronize();
+					fdas_cuda_customfft_stream(&fftplans1, &gpuarrays1, &cmdargs, &params, stream1);
+
+
 					gettimeofday(&t_end, NULL);
 					t_gpu = (double) (t_end.tv_sec + (t_end.tv_usec / 1000000.0)  - t_start.tv_sec - (t_start.tv_usec/ 1000000.0)) * 1000.0;
 					t_gpu_i = (t_gpu / (double)iter);
@@ -299,20 +280,12 @@ void acceleration_fdas(int range,
 					//------------- Testing BLN
 					//float signal_mean, signal_sd;
 					//------------- Testing BLN
-					int ibin=1;
-					if (cmdargs.inbin) ibin=2;
 					
-					unsigned int list_size;
-					float *d_MSD;
-					float h_MSD[3];
-					if ( cudaSuccess != cudaMalloc((void**) &d_MSD, sizeof(float)*3)) printf("Allocation error!\n");
-					unsigned int *gmem_fdas_peak_pos;
-					if ( cudaSuccess != cudaMalloc((void**) &gmem_fdas_peak_pos, 1*sizeof(int))) printf("Allocation error!\n");
-					cudaMemset((void*) gmem_fdas_peak_pos, 0, sizeof(int));
+					cudaMemsetAsync((void*) gmem_fdas_peak_pos1, 0, sizeof(int), stream1);
 					
 					// This might be bit iffy since when interbining is done values are correlated
 					printf("Dimensions for BLN: ibin:%d; siglen:%d;\n", ibin, params.siglen);
-					BLN(gpuarrays.d_ffdot_pwr, d_MSD, 32, 32, NKERN, ibin*params.siglen, 0, sigma_constant);
+					BLN_stream(gpuarrays1.d_ffdot_pwr, d_MSD1, 32, 32, NKERN, ibin*params.siglen, 0, sigma_constant, stream1);
 					////------------- Testing BLN
 					//checkCudaErrors(cudaMemcpy(h_MSD, d_MSD, 3*sizeof(float), cudaMemcpyDeviceToHost));
 					//signal_mean=h_MSD[0]; signal_sd=h_MSD[1];
@@ -321,47 +294,105 @@ void acceleration_fdas(int range,
 					//printf("BLN: mean:%f; sd:%f || MSD: mean:%f; sd:%f\n", signal_mean, signal_sd, h_MSD[0], h_MSD[1]);
 					////------------- Testing BLN
 					
-					PEAK_FIND_FOR_FDAS(gpuarrays.d_ffdot_pwr, gpuarrays.d_fdas_peak_list, d_MSD, NKERN, ibin*params.siglen, cmdargs.thresh, params.max_list_length, gmem_fdas_peak_pos, dm_count*dm_step[i] + dm_low[i]);
-					
-					checkCudaErrors(cudaMemcpy(h_MSD, d_MSD, 3*sizeof(float), cudaMemcpyDeviceToHost));
-					checkCudaErrors(cudaMemcpy(&list_size, gmem_fdas_peak_pos, sizeof(unsigned int), cudaMemcpyDeviceToHost));
+					PEAK_FIND_FOR_FDAS_stream(gpuarrays1.d_ffdot_pwr, gpuarrays1.d_fdas_peak_list, d_MSD1, NKERN, ibin*params.siglen, cmdargs.thresh, params.max_list_length, gmem_fdas_peak_pos1, dm_count*dm_step[i] + dm_low[i], stream1);
+					//PEAK_FIND_FOR_FDAS(gpuarrays1.d_ffdot_pwr, gpuarrays1.d_fdas_peak_list, d_MSD1, NKERN, ibin*params.siglen, cmdargs.thresh, params.max_list_length, gmem_fdas_peak_pos1, dm_count*dm_step[i] + dm_low[i]);
+
+					cudaStreamSynchronize(stream1);
+
+					//
+					checkCudaErrors( cudaMemcpyAsync(gpuarrays2.d_in_signal, output_buffer[i][dm_count], processed*sizeof(float), cudaMemcpyHostToDevice, stream2));
+
+					checkCudaErrors(cudaMemcpy(h_MSD1, d_MSD1, 3*sizeof(float), cudaMemcpyDeviceToHost));
+					checkCudaErrors(cudaMemcpy(&list_size, gmem_fdas_peak_pos1, sizeof(unsigned int), cudaMemcpyDeviceToHost));
 					if (enable_output_fdas_list == 1)
 					{
 						if(list_size>0)
-							fdas_write_list(&gpuarrays, &cmdargs, &params, h_MSD, dm_low[i], dm_count, dm_step[i], list_size);
+							fdas_write_list(&gpuarrays1, &cmdargs, &params, h_MSD1, dm_low[i], dm_count, dm_step[i], list_size);
 					}
-					cudaFree(d_MSD);
-					cudaFree(gmem_fdas_peak_pos);
 				}
 				if (enable_output_ffdot_plan == 1)
 				{
-					fdas_write_ffdot(&gpuarrays, &cmdargs, &params, dm_low[i], dm_count, dm_step[i]);
+					fdas_write_ffdot_stream(&gpuarrays1, &cmdargs, &params, dm_low[i], dm_count, dm_step[i], stream1);
 				}
-  				// Call sofias code here pass...
-				// output_buffer[i][dm_count],
+
+				// increment loop index
+				dm_count++;
+
+				/*********************************** stream2 *********************************************************/
+
+				cudaProfilerStart(); //exclude cuda initialization ops
+				if(cmdargs.basic) {
+					gettimeofday(&t_start, NULL); //don't time transfer
+				    fdas_cuda_basic_stream(&fftplans2, &gpuarrays2, &cmdargs, &params, stream2);
+
+				    gettimeofday(&t_end, NULL);
+				    t_gpu = (double) (t_end.tv_sec + (t_end.tv_usec / 1000000.0)  - t_start.tv_sec - (t_start.tv_usec/ 1000000.0)) * 1000.0;
+				    t_gpu_i = (t_gpu / (double)iter);
+				    printf("\n\nConvolution using basic algorithm with cuFFT\nTotal process took: %f ms per iteration \nTotal time %d iterations: %f ms\n", t_gpu_i, iter, t_gpu);
+				}
+
+				#ifndef NOCUST
+				if (cmdargs.kfft) {
+					printf("\nMain: running FDAS with custom fft\n");
+					gettimeofday(&t_start, NULL); //don't time transfer
+					fdas_cuda_customfft_stream(&fftplans2, &gpuarrays2, &cmdargs, &params, stream2);
+
+					gettimeofday(&t_end, NULL);
+					t_gpu = (double) (t_end.tv_sec + (t_end.tv_usec / 1000000.0)  - t_start.tv_sec - (t_start.tv_usec/ 1000000.0)) * 1000.0;
+					t_gpu_i = (t_gpu / (double)iter);
+					printf("\n\nConvolution using custom FFT:\nTotal process took: %f ms\n per iteration \nTotal time %d iterations: %f ms\n", t_gpu_i, iter, t_gpu);
+				}
+				#endif
+				// Calculating base level noise and peak find
+				if(cmdargs.basic || cmdargs.kfft){
+					//------------- Testing BLN
+					//float signal_mean, signal_sd;
+					//------------- Testing BLN
+					cudaMemsetAsync((void*) gmem_fdas_peak_pos2, 0, sizeof(int), stream2);
+
+					// This might be bit iffy since when interbining is done values are correlated
+					printf("Dimensions for BLN: ibin:%d; siglen:%d;\n", ibin, params.siglen);
+					BLN_stream(gpuarrays2.d_ffdot_pwr, d_MSD1, 32, 32, NKERN, ibin*params.siglen, 0, sigma_constant, stream2);
+					////------------- Testing BLN
+					//checkCudaErrors(cudaMemcpy(h_MSD, d_MSD, 3*sizeof(float), cudaMemcpyDeviceToHost));
+					//signal_mean=h_MSD[0]; signal_sd=h_MSD[1];
+					//MSD_limited(gpuarrays.d_ffdot_pwr, d_MSD, NKERN, ibin*params.siglen, 0);
+					//checkCudaErrors(cudaMemcpy(h_MSD, d_MSD, 3*sizeof(float), cudaMemcpyDeviceToHost));
+					//printf("BLN: mean:%f; sd:%f || MSD: mean:%f; sd:%f\n", signal_mean, signal_sd, h_MSD[0], h_MSD[1]);
+					////------------- Testing BLN
+
+					PEAK_FIND_FOR_FDAS_stream(gpuarrays2.d_ffdot_pwr, gpuarrays2.d_fdas_peak_list, d_MSD2, NKERN, ibin*params.siglen, cmdargs.thresh, params.max_list_length, gmem_fdas_peak_pos2, dm_count*dm_step[i] + dm_low[i], stream2);
+
+					cudaStreamSynchronize(stream2);
+
+					checkCudaErrors(cudaMemcpy(h_MSD2, d_MSD2, 3*sizeof(float), cudaMemcpyDeviceToHost));
+					checkCudaErrors(cudaMemcpy(&list_size, gmem_fdas_peak_pos2, sizeof(unsigned int), cudaMemcpyDeviceToHost));
+					if (enable_output_fdas_list == 1)
+					{
+						if(list_size>0)
+							fdas_write_list(&gpuarrays2, &cmdargs, &params, h_MSD2, dm_low[i], dm_count, dm_step[i], list_size);
+					}
+				}
+				if (enable_output_ffdot_plan == 1)
+				{
+					fdas_write_ffdot_stream(&gpuarrays2, &cmdargs, &params, dm_low[i], dm_count, dm_step[i], stream2);
+				}
 			}
 		}
 
-	}
-
-	if (cmdargs.search)
-	{
-		cufftDestroy(fftplans.realplan);
-	    cufftDestroy(fftplans.forwardplan);
+		cufftDestroy(fftplans1.realplan);
+	    cufftDestroy(fftplans1.forwardplan);
+		cufftDestroy(fftplans2.realplan);
+	    cufftDestroy(fftplans2.forwardplan);
 	    // releasing GPU arrays
-	    fdas_free_gpu_arrays(&gpuarrays, &cmdargs);
-
-	    /* -- release what has to be released
-	     * -- don't forget it's pinned memory here so write a function which uses cudaFreeHost
-	     * for (int ii = 0; ii < number_dm_concurrently; ++ii)
-		 * {
-		 *     fdas_free_gpu_arrays(&gpuarrays_list[ii], &cmdargs);
-		 * }
-		 * for (int ii = 0; ii < number_dm_concurrently; ++ii)
-		 * {
-		 *     cudaStreamDestroy(&stream_list[i]);
-		 * }
-	     */
+	    fdas_free_gpu_arrays_stream(&gpuarrays1, &cmdargs);
+	    fdas_free_gpu_arrays_stream(&gpuarrays2, &cmdargs);
+		res1 = cudaStreamDestroy(stream1);
+		res2 = cudaStreamDestroy(stream2);
+		//
+		cudaFree(d_MSD1);
+		cudaFree(gmem_fdas_peak_pos1);
+		cudaFree(d_MSD2);
+		cudaFree(gmem_fdas_peak_pos2);
 	}
-
 }

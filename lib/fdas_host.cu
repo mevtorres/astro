@@ -124,6 +124,71 @@ void fdas_free_gpu_arrays(fdas_gpuarrays *arrays,  cmd_args *cmdargs)
 	// Added by KA
 	cudaFree(arrays->d_fdas_peak_list);
 }
+
+void fdas_alloc_gpu_arrays_stream(fdas_gpuarrays *arrays,  cmd_args *cmdargs)
+{
+  printf("\nAllocating gpu arrays:\n");
+
+  if (cmdargs->inbin){
+    printf("\nF-fdot array will be interbinned\n");
+  }
+    double gbyte = 1024.0*1024.0*1024.0;
+    //double mbyte = 1024.0*1024.0;
+
+  // Memory allocations for gpu real fft input / output signal
+  checkCudaErrors(cudaMallocHost((void**)&arrays->d_in_signal, arrays->mem_insig));
+
+  checkCudaErrors(cudaMallocHost((void**)&arrays->d_fft_signal, arrays->mem_rfft));
+
+  //Allocating arrays for fourier domain convolution
+  checkCudaErrors(cudaMallocHost((void**)&arrays->d_ext_data, arrays->mem_extsig));
+
+  //templates
+   checkCudaErrors(cudaMallocHost((void**)&arrays->d_kernel, KERNLEN*sizeof(float2)*NKERN ));
+
+   //ffdot planes
+   checkCudaErrors(cudaMallocHost((void**)&arrays->d_ffdot_pwr, arrays->mem_ffdot ));
+   //initialise array
+   checkCudaErrors(cudaMemset(arrays->d_ffdot_pwr, 0, arrays->mem_ffdot));
+
+   printf("ffdot x size: %zu",arrays->mem_ffdot/sizeof(float)/NKERN);
+   if(cmdargs->basic==1){
+     checkCudaErrors(cudaMallocHost(&arrays->d_ffdot_cpx, arrays->mem_ffdot_cpx));
+   }
+
+   if(cmdargs->kfft && cmdargs->inbin){
+         //    printf("mem_ipedge = %u ",mem_ipedge/);
+     checkCudaErrors(cudaMallocHost(&arrays->ip_edge_points, arrays->mem_ipedge));
+   }
+
+	// Added by KA
+	if ( cudaSuccess != cudaMallocHost((void**) &arrays->d_fdas_peak_list, arrays->mem_max_list_size)) printf("Allocation error in FDAS: d_fdas_peak_list\n");
+
+   // check allocated/free memory
+   size_t mfree,  mtotal;
+   checkCudaErrors(cudaMemGetInfo ( &mfree, &mtotal ));
+   printf("\nMemory allocation finished: Total memory for this device: %.2f GB\nAvailable memory left on this device: %.2f GB \n", mtotal/gbyte, mfree/gbyte);
+}
+
+void fdas_free_gpu_arrays_stream(fdas_gpuarrays *arrays,  cmd_args *cmdargs)
+{
+
+    checkCudaErrors(cudaFreeHost(arrays->d_in_signal));
+    checkCudaErrors(cudaFreeHost(arrays->d_fft_signal));
+    checkCudaErrors(cudaFreeHost(arrays->d_ext_data));
+    checkCudaErrors(cudaFreeHost(arrays->d_ffdot_pwr));
+    checkCudaErrors(cudaFreeHost(arrays->d_kernel));
+    if(cmdargs->basic)
+      checkCudaErrors(cudaFreeHost(arrays->d_ffdot_cpx));
+
+    if(cmdargs->kfft && cmdargs->inbin)
+      checkCudaErrors(cudaFreeHost(arrays->ip_edge_points));
+
+	// Added by KA
+    checkCudaErrors(cudaFreeHost(arrays->d_fdas_peak_list));
+}
+
+
 /*
 void fdas_create_acc_sig(fdas_new_acc_sig *acc_sig, cmd_args *cmdargs)
 /* Create accelerated signal with given parameters in a float array */
@@ -132,11 +197,9 @@ void fdas_create_acc_sig(fdas_new_acc_sig *acc_sig, cmd_args *cmdargs)
   double omega = 2*M_PI*acc_sig->freq0;
   double accel;
   double tobs;
-
   // gaussian distribution from C++ <random>
   std::default_random_engine rgen;
   std::normal_distribution<float> gdist(0.0,cmdargs->nsig);
-
   tobs = (double) (TSAMP*acc_sig->nsamps);
   accel = ((double)acc_sig->zval * SLIGHT) / (acc_sig->freq0*tobs*tobs);
   printf("\n\npreparing test signal, observation time = %f s, %d nsamps f0 = %f Hz with %d harmonics\n", tobs, acc_sig->nsamps, acc_sig->freq0, acc_sig->nharms);
@@ -158,9 +221,7 @@ void fdas_create_acc_sig(fdas_new_acc_sig *acc_sig, cmd_args *cmdargs)
   //Write to file 
   char afname[200];
   sprintf(afname, "data/acc_sig_8192x%d_%dharms_%dduty_%.3fHz_%dz_%dnsigma.dat",  acc_sig->mul,  acc_sig->nharms, (int)( acc_sig->duty*100.0),  acc_sig->freq0,  acc_sig->zval, acc_sig->nsig );
-
   write_output_file(afname, &acc_sig->acc_signal, acc_sig->nsamps );
-
   free(acc_sig->acc_signal);
 }
 */
@@ -326,6 +387,78 @@ void fdas_cuda_basic(fdas_cufftplan *fftplans, fdas_gpuarrays *gpuarrays, cmd_ar
   }
 }
 
+void fdas_cuda_basic_stream(fdas_cufftplan *fftplans, fdas_gpuarrays *gpuarrays, cmd_args *cmdargs, fdas_params *params, cudaStream_t stream)
+{
+  /* Basic GPU fdas algorithm using cuFFT */
+  //int inbin;
+  int cthreads = TBSIZEX;
+  int cblocks = KERNLEN/TBSIZEX;
+
+  dim3 pwthreads(PTBSIZEX, PTBSIZEY);
+  dim3 pwblocks((params->sigblock / PTBSIZEX) + 1, NKERN/PTBSIZEY);
+
+  // associate the plan with the working stream
+  cufftSetStream(fftplans->realplan, stream);
+
+   /* if (cmdargs->inbin)
+    inbin = 2;
+  else
+    inbin = 1;
+  */
+  //real fft
+  cufftExecR2C(fftplans->realplan, gpuarrays->d_in_signal, gpuarrays->d_fft_signal);
+
+  if (cmdargs->norm){
+    //  PRESTO deredden - remove red noise.
+    // TODO: replace with GPU version
+    float2 *fftsig;
+    fftsig = (float2*)malloc((params->rfftlen)*sizeof(float2));
+
+    checkCudaErrors( cudaMemcpyAsync(fftsig, gpuarrays->d_fft_signal, (params->rfftlen)*sizeof(float2), cudaMemcpyDeviceToHost, stream));
+    presto_dered_sig(fftsig, params->rfftlen);
+    checkCudaErrors( cudaMemcpyAsync(gpuarrays->d_fft_signal, fftsig, (params->rfftlen)*sizeof(float2), cudaMemcpyHostToDevice, stream));
+    free(fftsig);
+  }
+
+  //overlap-copy
+   cuda_overlap_copy<<<KERNLEN/64, 64, 0, stream >>>(gpuarrays->d_ext_data, gpuarrays->d_fft_signal, params->sigblock, params->rfftlen, params->extlen, params->offset, params->nblocks );
+
+   if (cmdargs->norm){
+     //  PRESTO block median normalization
+     // TODO: replace with GPU version
+     float2 *extsig;
+     extsig = (float2*)malloc((params->extlen)*sizeof(float2));
+     checkCudaErrors( cudaMemcpyAsync(extsig, gpuarrays->d_ext_data, (params->extlen)*sizeof(float2), cudaMemcpyDeviceToHost, stream));
+     for(int b=0; b<params->nblocks; ++b)
+       presto_norm(extsig+b*KERNLEN, KERNLEN);
+     checkCudaErrors( cudaMemcpyAsync(gpuarrays->d_ext_data, extsig, (params->extlen)*sizeof(float2), cudaMemcpyHostToDevice, stream));
+     free(extsig);
+   }
+
+  //complex block fft
+  cufftExecC2C(fftplans->forwardplan, gpuarrays->d_ext_data, gpuarrays->d_ext_data, CUFFT_FORWARD);
+
+  //complex multiplication kernel
+  cuda_convolve_reg_1d_halftemps<<<cblocks, cthreads, 0, stream >>>( gpuarrays->d_kernel, gpuarrays->d_ext_data, gpuarrays->d_ffdot_cpx, params->extlen, params->scale);
+
+  //inverse fft
+  for (int k=0; k < ZMAX/2; k++){
+    cufftExecC2C(fftplans->forwardplan, gpuarrays->d_ffdot_cpx + k * params->extlen, gpuarrays->d_ffdot_cpx + k *params->extlen, CUFFT_INVERSE);
+    cufftExecC2C(fftplans->forwardplan, gpuarrays->d_ffdot_cpx + (ZMAX-k) * params->extlen, gpuarrays->d_ffdot_cpx + (ZMAX-k) *params->extlen, CUFFT_INVERSE);
+  }
+  // z=0
+  cufftExecC2C(fftplans->forwardplan, gpuarrays->d_ffdot_cpx + ((ZMAX/2) * params->extlen), gpuarrays->d_ffdot_cpx + ((ZMAX/2) * params->extlen), CUFFT_INVERSE);
+
+  //power spectrum
+  if (cmdargs->inbin){
+    cuda_ffdotpow_concat_2d_inbin<<< pwblocks, pwthreads, 0, stream >>>(gpuarrays->d_ffdot_cpx, gpuarrays->d_ffdot_pwr, params->sigblock, params->offset, params->nblocks, params->extlen, params->siglen);
+  }
+  else{
+    cuda_ffdotpow_concat_2d <<< pwblocks, pwthreads, 0, stream >>>(gpuarrays->d_ffdot_cpx, gpuarrays->d_ffdot_pwr, params->sigblock, params->offset, params->nblocks, params->extlen, params->siglen);
+  }
+}
+
+
 #ifndef NOCUST
 void fdas_cuda_customfft(fdas_cufftplan *fftplans, fdas_gpuarrays *gpuarrays, cmd_args *cmdargs, fdas_params *params)
 {
@@ -368,6 +501,53 @@ void fdas_cuda_customfft(fdas_cufftplan *fftplans, fdas_gpuarrays *gpuarrays, cm
   }
   else{
     cuda_convolve_customfft_wes_no_reorder02<<< params->nblocks, KERNLEN >>>( gpuarrays->d_kernel, gpuarrays->d_ext_data, gpuarrays->d_ffdot_pwr, params->sigblock, params->extlen, params->siglen, params->offset, params->scale);
+  }
+}
+
+void fdas_cuda_customfft_stream(fdas_cufftplan *fftplans, fdas_gpuarrays *gpuarrays, cmd_args *cmdargs, fdas_params *params, cudaStream_t stream)
+{
+  //int nthreads;
+  dim3 cblocks(params->nblocks, NKERN/2);
+
+  // associate the plan with the working stream
+  cufftSetStream(fftplans->realplan, stream);
+
+  //real fft
+  cufftExecR2C(fftplans->realplan, gpuarrays->d_in_signal, gpuarrays->d_fft_signal);
+
+  if (cmdargs->norm){
+    //  PRESTO deredden - remove red noise.
+    // TODO: replace with GPU version
+    float2 *fftsig;
+    fftsig = (float2*)malloc((params->rfftlen)*sizeof(float2));
+
+    checkCudaErrors( cudaMemcpyAsync(fftsig, gpuarrays->d_fft_signal, (params->rfftlen)*sizeof(float2), cudaMemcpyDeviceToHost, stream));
+    presto_dered_sig(fftsig, params->rfftlen);
+    checkCudaErrors( cudaMemcpyAsync(gpuarrays->d_fft_signal, fftsig, (params->rfftlen)*sizeof(float2), cudaMemcpyHostToDevice, stream));
+    free(fftsig);
+  }
+
+  //overlap-copy
+  cuda_overlap_copy_smallblk<<<params->nblocks, KERNLEN, 0, stream >>>(gpuarrays->d_ext_data, gpuarrays->d_fft_signal, params->sigblock, params->rfftlen, params->extlen, params->offset, params->nblocks );
+
+  if (cmdargs->norm){
+    //  PRESTO block median normalization
+    // TODO: replace with GPU version
+    float2 *extsig;
+    extsig = (float2*)malloc((params->extlen)*sizeof(float2));
+    checkCudaErrors( cudaMemcpy(extsig, gpuarrays->d_ext_data, (params->extlen)*sizeof(float2), cudaMemcpyDeviceToHost));
+    for(int b=0; b<params->nblocks; ++b)
+      presto_norm(extsig+b*KERNLEN, KERNLEN);
+    checkCudaErrors( cudaMemcpy(gpuarrays->d_ext_data, extsig, (params->extlen)*sizeof(float2), cudaMemcpyHostToDevice));
+    free(extsig);
+  }
+
+  // Custom FFT convolution kernel
+  if(cmdargs->inbin){
+    cuda_convolve_customfft_wes_no_reorder02_inbin<<< params->nblocks, KERNLEN, 0, stream >>>( gpuarrays->d_kernel, gpuarrays->d_ext_data, gpuarrays->d_ffdot_pwr, params->sigblock, params->extlen, params->siglen, params->offset, params->scale, gpuarrays->ip_edge_points);
+  }
+  else{
+    cuda_convolve_customfft_wes_no_reorder02<<< params->nblocks, KERNLEN, 0, stream >>>( gpuarrays->d_kernel, gpuarrays->d_ext_data, gpuarrays->d_ffdot_pwr, params->sigblock, params->extlen, params->siglen, params->offset, params->scale);
   }
 }
 #endif
@@ -510,5 +690,98 @@ void fdas_write_ffdot(fdas_gpuarrays *gpuarrays, cmd_args *cmdargs, fdas_params 
   printf("\nFinished writing file %s\n",pfname);
     
   free(h_ffdotpwr);
+
+}
+
+void fdas_write_ffdot_stream(fdas_gpuarrays *gpuarrays, cmd_args *cmdargs, fdas_params *params, float dm_low, int dm_count, float dm_step, cudaStream_t stream) {
+  int ibin=1;
+  if (cmdargs->inbin)
+    ibin=2;
+  /* Download, threshold and write ffdot data to file */
+  //int nsamps = params->nsamps;
+
+  printf("\n\nWrite data for signal with %d samples\nf-fdot size=%u\n",params->nsamps, params->ffdotlen);
+  float *h_ffdotpwr;
+  cudaMallocHost((void**)&h_ffdotpwr, params->ffdotlen* sizeof(float));
+
+  //download data
+  checkCudaErrors(cudaMemcpyAsync(h_ffdotpwr, gpuarrays->d_ffdot_pwr, params->ffdotlen*sizeof(float), cudaMemcpyDeviceToHost, stream));
+
+  // calculating statistics
+  double total = 0.0;
+  double mean;
+  double stddev;
+  // unsigned int j;
+  for ( int j = 0; j < params->ffdotlen; ++j){
+	total += (double)(h_ffdotpwr[j]);
+    if(isnan(total)){
+      printf("\nnan detected during sum for mean at j=%d\nValue at j:%f\n",j,h_ffdotpwr[j]);
+      exit(1);
+    }
+  }
+
+  mean = total / ((double)(params->ffdotlen));
+
+  printf("\ntotal ffdot:%lf\tmean ffdot: %lf", total, mean);
+
+  // Calculate standard deviation
+  total = 0.0;
+  for ( int j = 0; j < params->ffdotlen; ++j){
+    total += ((double)h_ffdotpwr[j] - mean ) * ((double)h_ffdotpwr[j] - mean);
+    if(isnan(total)||isinf(total)){
+      printf("\ninf/nan detected during sum for mean at j=%d\nValue at j:%f\n",j,h_ffdotpwr[j]);
+      exit(1);
+    }
+  }
+  stddev = sqrt(abs(total) / (double)(params->ffdotlen - 1));
+  printf("\nmean ffdot: %f\tstd ffdot: %lf\n", mean, stddev);
+
+  //prepare file
+  const char *dirname= "output_data";
+  struct stat st = {0};
+
+  if (stat(dirname, &st) == -1) {
+    printf("\nDirectory %s does not exist, creating...\n", dirname);
+    mkdir(dirname, 0700);
+  }
+
+  FILE *fp_c;
+  char pfname[200];
+//  char *infilename;
+//  infilename = basename(cmdargs->afname);
+// filename needs to be acc_dm_%f, dm_low[i] + ((float)dm_count)*dm_step[i]
+  //sprintf(pfname, "%s/out_inbin%d_%s",dirname,ibin,infilename);
+  sprintf(pfname, "acc_%f.dat", dm_low + ((float)dm_count)*dm_step);
+  printf("\nwriting results to file %s\n",pfname);
+  if ((fp_c=fopen(pfname, "w")) == NULL) {
+    fprintf(stderr, "Error opening %s file for writing: %s\n",pfname, strerror(errno));
+    exit(1);
+  }
+  float pow, sigma;
+  double tobs = TSAMP * (double)params->nsamps*ibin;
+  unsigned int numindep = params->siglen*(NKERN+1)*ACCEL_STEP/6.95; // taken from PRESTO
+
+  //write to file
+  printf("\nWriting ffdot data to file...\n");
+
+	for(int a = 0; a < NKERN; a++) {
+		double acc = (double) (ZMAX - a* ACCEL_STEP);
+		for( int j = 0; j < ibin*params->siglen; j++){
+			pow =  h_ffdotpwr[a * ibin*params->siglen + j]; //(h_ffdotpwr[a * params->siglen + j]-mean)/stddev;
+
+			if( pow > cmdargs->thresh) {
+				sigma = candidate_sigma(pow, cmdargs->nharms, numindep);//power, number of harmonics, number of independed searches=1...2^harms
+				//  sigma=1.0;
+				double jfreq = (double)(j) / tobs;
+				double acc1 = acc*SLIGHT / jfreq / tobs / tobs;
+				fprintf(fp_c, "%.2f\t%.3f\t%u\t%.3f\t%.3f\t%.3f\n", acc, acc1, j , jfreq, pow, sigma);
+			}
+		}
+	}
+
+  fclose(fp_c);
+  printf("\nFinished writing file %s\n",pfname);
+
+  cudaFreeHost(h_ffdotpwr);
 
 }

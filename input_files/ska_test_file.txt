@@ -21,7 +21,7 @@ acceleration
 -threshold
 fdas_custom_fft
 -fdas_inbin
-fdas_norm
+-fdas_norm
 debug
 -analysis_debug
 -failsafe
