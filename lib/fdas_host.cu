@@ -136,33 +136,33 @@ void fdas_alloc_gpu_arrays_stream(fdas_gpuarrays *arrays,  cmd_args *cmdargs)
     //double mbyte = 1024.0*1024.0;
 
   // Memory allocations for gpu real fft input / output signal
-  checkCudaErrors(cudaMallocHost((void**)&arrays->d_in_signal, arrays->mem_insig));
+  checkCudaErrors(cudaMalloc((void**)&arrays->d_in_signal, arrays->mem_insig));
 
-  checkCudaErrors(cudaMallocHost((void**)&arrays->d_fft_signal, arrays->mem_rfft));
+  checkCudaErrors(cudaMalloc((void**)&arrays->d_fft_signal, arrays->mem_rfft));
 
   //Allocating arrays for fourier domain convolution
-  checkCudaErrors(cudaMallocHost((void**)&arrays->d_ext_data, arrays->mem_extsig));
+  checkCudaErrors(cudaMalloc((void**)&arrays->d_ext_data, arrays->mem_extsig));
 
   //templates
-   checkCudaErrors(cudaMallocHost((void**)&arrays->d_kernel, KERNLEN*sizeof(float2)*NKERN ));
+   checkCudaErrors(cudaMalloc((void**)&arrays->d_kernel, KERNLEN*sizeof(float2)*NKERN ));
 
    //ffdot planes
-   checkCudaErrors(cudaMallocHost((void**)&arrays->d_ffdot_pwr, arrays->mem_ffdot ));
+   checkCudaErrors(cudaMalloc((void**)&arrays->d_ffdot_pwr, arrays->mem_ffdot ));
    //initialise array
    checkCudaErrors(cudaMemset(arrays->d_ffdot_pwr, 0, arrays->mem_ffdot));
 
    printf("ffdot x size: %zu",arrays->mem_ffdot/sizeof(float)/NKERN);
    if(cmdargs->basic==1){
-     checkCudaErrors(cudaMallocHost(&arrays->d_ffdot_cpx, arrays->mem_ffdot_cpx));
+     checkCudaErrors(cudaMalloc(&arrays->d_ffdot_cpx, arrays->mem_ffdot_cpx));
    }
 
    if(cmdargs->kfft && cmdargs->inbin){
          //    printf("mem_ipedge = %u ",mem_ipedge/);
-     checkCudaErrors(cudaMallocHost(&arrays->ip_edge_points, arrays->mem_ipedge));
+     checkCudaErrors(cudaMalloc(&arrays->ip_edge_points, arrays->mem_ipedge));
    }
 
 	// Added by KA
-	if ( cudaSuccess != cudaMallocHost((void**) &arrays->d_fdas_peak_list, arrays->mem_max_list_size)) printf("Allocation error in FDAS: d_fdas_peak_list\n");
+	if ( cudaSuccess != cudaMalloc((void**) &arrays->d_fdas_peak_list, arrays->mem_max_list_size)) printf("Allocation error in FDAS: d_fdas_peak_list\n");
 
    // check allocated/free memory
    size_t mfree,  mtotal;
@@ -173,19 +173,19 @@ void fdas_alloc_gpu_arrays_stream(fdas_gpuarrays *arrays,  cmd_args *cmdargs)
 void fdas_free_gpu_arrays_stream(fdas_gpuarrays *arrays,  cmd_args *cmdargs)
 {
 
-    checkCudaErrors(cudaFreeHost(arrays->d_in_signal));
-    checkCudaErrors(cudaFreeHost(arrays->d_fft_signal));
-    checkCudaErrors(cudaFreeHost(arrays->d_ext_data));
-    checkCudaErrors(cudaFreeHost(arrays->d_ffdot_pwr));
-    checkCudaErrors(cudaFreeHost(arrays->d_kernel));
+    checkCudaErrors(cudaFree(arrays->d_in_signal));
+    checkCudaErrors(cudaFree(arrays->d_fft_signal));
+    checkCudaErrors(cudaFree(arrays->d_ext_data));
+    checkCudaErrors(cudaFree(arrays->d_ffdot_pwr));
+    checkCudaErrors(cudaFree(arrays->d_kernel));
     if(cmdargs->basic)
-      checkCudaErrors(cudaFreeHost(arrays->d_ffdot_cpx));
+      checkCudaErrors(cudaFree(arrays->d_ffdot_cpx));
 
     if(cmdargs->kfft && cmdargs->inbin)
-      checkCudaErrors(cudaFreeHost(arrays->ip_edge_points));
+      checkCudaErrors(cudaFree(arrays->ip_edge_points));
 
 	// Added by KA
-    checkCudaErrors(cudaFreeHost(arrays->d_fdas_peak_list));
+    checkCudaErrors(cudaFree(arrays->d_fdas_peak_list));
 }
 
 
@@ -535,10 +535,10 @@ void fdas_cuda_customfft_stream(fdas_cufftplan *fftplans, fdas_gpuarrays *gpuarr
     // TODO: replace with GPU version
     float2 *extsig;
     extsig = (float2*)malloc((params->extlen)*sizeof(float2));
-    checkCudaErrors( cudaMemcpy(extsig, gpuarrays->d_ext_data, (params->extlen)*sizeof(float2), cudaMemcpyDeviceToHost));
+    checkCudaErrors( cudaMemcpyAsync(extsig, gpuarrays->d_ext_data, (params->extlen)*sizeof(float2), cudaMemcpyDeviceToHost, stream));
     for(int b=0; b<params->nblocks; ++b)
       presto_norm(extsig+b*KERNLEN, KERNLEN);
-    checkCudaErrors( cudaMemcpy(gpuarrays->d_ext_data, extsig, (params->extlen)*sizeof(float2), cudaMemcpyHostToDevice));
+    checkCudaErrors( cudaMemcpyAsync(gpuarrays->d_ext_data, extsig, (params->extlen)*sizeof(float2), cudaMemcpyHostToDevice, stream));
     free(extsig);
   }
 

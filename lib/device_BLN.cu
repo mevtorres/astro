@@ -72,7 +72,7 @@ int BLN_stream(float *d_input, float *d_MSD, int CellDim_x, int CellDim_y, int n
 
 	//---------> Allocation of temporary memory
 	float *d_output;
-	cudaMallocHost((void **) &d_output, GridSize_x*GridSize_y*3*sizeof(float));
+	cudaMalloc((void **) &d_output, GridSize_x*GridSize_y*3*sizeof(float));
 
 	//---------> MSD
 	BLN_init();
@@ -80,7 +80,7 @@ int BLN_stream(float *d_input, float *d_MSD, int CellDim_x, int CellDim_y, int n
 	BLN_outlier_rejection<<<final_gridSize, final_blockSize,0,stream>>>(d_output, d_MSD, GridSize_x*GridSize_y, (float) (CellDim_x*CellDim_y), multiplier);
 
 	//---------> De-allocation of temporary memory
-	cudaFreeHost(d_output);
+	cudaFree(d_output);
 
 	return(1);
 }

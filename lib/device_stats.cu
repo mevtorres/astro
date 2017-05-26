@@ -54,10 +54,10 @@ void stats_gpu(cudaEvent_t event, cudaStream_t stream, int samps, float *mean, f
 	checkCudaErrors(cudaMalloc((void** )&d_sum_square, size * sizeof(float)));
 
 	float* h_sum;
-	checkCudaErrors(cudaMallocHost((void** )&h_sum, size * sizeof(float)));
+	checkCudaErrors(cudaMalloc((void** )&h_sum, size * sizeof(float)));
 
 	float* h_sum_square;
-	checkCudaErrors(cudaMallocHost((void** )&h_sum_square, size * sizeof(float)));
+	checkCudaErrors(cudaMalloc((void** )&h_sum_square, size * sizeof(float)));
 
 	cudaStreamWaitEvent(stream, event, 0);
 	stats_kernel<<<num_blocks, threads_per_block, 0, stream>>>(half_samps, d_sum, d_sum_square, d_signal_power);
@@ -84,8 +84,8 @@ void stats_gpu(cudaEvent_t event, cudaStream_t stream, int samps, float *mean, f
 
 	cudaFree(d_sum);
 	cudaFree(d_sum_square);
-	cudaFreeHost(h_sum);
-	cudaFreeHost(h_sum_square);
+	cudaFree(h_sum);
+	cudaFree(h_sum_square);
 
 }
 

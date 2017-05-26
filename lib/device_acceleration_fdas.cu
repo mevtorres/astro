@@ -220,13 +220,13 @@ void acceleration_fdas(int range,
 		unsigned int list_size;
 		float *d_MSD1, *d_MSD2;
 		float h_MSD1[3], h_MSD2[3];
-		if ( cudaSuccess != cudaMallocHost((void**) &d_MSD1, sizeof(float)*3)) printf("Allocation error!\n");
+		if ( cudaSuccess != cudaMalloc((void**) &d_MSD1, sizeof(float)*3)) printf("Allocation error!\n");
 		unsigned int *gmem_fdas_peak_pos1;
-		if ( cudaSuccess != cudaMallocHost((void**) &gmem_fdas_peak_pos1, 1*sizeof(int))) printf("Allocation error!\n");
+		if ( cudaSuccess != cudaMalloc((void**) &gmem_fdas_peak_pos1, 1*sizeof(int))) printf("Allocation error!\n");
 		cudaMemset((void*) gmem_fdas_peak_pos1, 0, sizeof(int));
-		if ( cudaSuccess != cudaMallocHost((void**) &d_MSD2, sizeof(float)*3)) printf("Allocation error!\n");
+		if ( cudaSuccess != cudaMalloc((void**) &d_MSD2, sizeof(float)*3)) printf("Allocation error!\n");
 		unsigned int *gmem_fdas_peak_pos2;
-		if ( cudaSuccess != cudaMallocHost((void**) &gmem_fdas_peak_pos2, 1*sizeof(int))) printf("Allocation error!\n");
+		if ( cudaSuccess != cudaMalloc((void**) &gmem_fdas_peak_pos2, 1*sizeof(int))) printf("Allocation error!\n");
 		cudaMemset((void*) gmem_fdas_peak_pos2, 0, sizeof(int));
 
 		// Starting main acceleration search
@@ -300,10 +300,10 @@ void acceleration_fdas(int range,
 					cudaStreamSynchronize(stream1);
 
 					//
-					checkCudaErrors( cudaMemcpyAsync(gpuarrays2.d_in_signal, output_buffer[i][dm_count], processed*sizeof(float), cudaMemcpyHostToDevice, stream2));
+					checkCudaErrors( cudaMemcpyAsync(gpuarrays2.d_in_signal, output_buffer[i][dm_count+1], processed*sizeof(float), cudaMemcpyHostToDevice, stream2));
 
-					checkCudaErrors(cudaMemcpy(h_MSD1, d_MSD1, 3*sizeof(float), cudaMemcpyDeviceToHost));
-					checkCudaErrors(cudaMemcpy(&list_size, gmem_fdas_peak_pos1, sizeof(unsigned int), cudaMemcpyDeviceToHost));
+					checkCudaErrors(cudaMemcpyAsync(h_MSD1, d_MSD1, 3*sizeof(float), cudaMemcpyDeviceToHost, stream1));
+					checkCudaErrors(cudaMemcpyAsync(&list_size, gmem_fdas_peak_pos1, sizeof(unsigned int), cudaMemcpyDeviceToHost, stream1));
 					if (enable_output_fdas_list == 1)
 					{
 						if(list_size>0)
@@ -365,8 +365,8 @@ void acceleration_fdas(int range,
 
 					cudaStreamSynchronize(stream2);
 
-					checkCudaErrors(cudaMemcpy(h_MSD2, d_MSD2, 3*sizeof(float), cudaMemcpyDeviceToHost));
-					checkCudaErrors(cudaMemcpy(&list_size, gmem_fdas_peak_pos2, sizeof(unsigned int), cudaMemcpyDeviceToHost));
+					checkCudaErrors(cudaMemcpyAsync(h_MSD2, d_MSD2, 3*sizeof(float), cudaMemcpyDeviceToHost, stream2));
+					checkCudaErrors(cudaMemcpyAsync(&list_size, gmem_fdas_peak_pos2, sizeof(unsigned int), cudaMemcpyDeviceToHost, stream2));
 					if (enable_output_fdas_list == 1)
 					{
 						if(list_size>0)
