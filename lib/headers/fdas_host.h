@@ -91,6 +91,8 @@ void fdas_cuda_customfft_stream(fdas_cufftplan *fftplans, fdas_gpuarrays *gpuarr
 
 void fdas_write_list(fdas_gpuarrays *gpuarrays, cmd_args *cmdargs, fdas_params *params, float *h_MSD, float dm_low, int dm_count, float dm_step, unsigned int list_size);
 
+void fdas_write_list_stream(fdas_gpuarrays *gpuarrays, cmd_args *cmdargs, fdas_params *params, float *h_MSD, float dm_low, int dm_count, float dm_step, unsigned int list_size, cudaStream_t stream);
+
 void fdas_write_ffdot(fdas_gpuarrays *gpuarrays, cmd_args *cmdargs, fdas_params *params, float dm_low, int dm_count, float dm_step);
 
 void fdas_write_ffdot_stream(fdas_gpuarrays *gpuarrays, cmd_args *cmdargs, fdas_params *params, float dm_low, int dm_count, float dm_step, cudaStream_t stream);

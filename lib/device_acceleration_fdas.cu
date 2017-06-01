@@ -236,6 +236,8 @@ void acceleration_fdas(int range,
 		int iter=cmdargs.iter;
 		int titer=1;
 
+		cudaProfilerStart();
+
 		// FFT
 		for (int i = 0; i < range; i++) {
 			processed=samps/inBin[i];
@@ -251,7 +253,6 @@ void acceleration_fdas(int range,
 				t_gpu_i = (t_gpu /(double)titer);
 				printf("\n\nAverage vector transfer time of %d float samples (%.2f Mb) from 1000 iterations: %f ms\n\n", params.nsamps, (float)(gpuarrays1.mem_insig)/mbyte, t_gpu_i);
 
-				cudaProfilerStart(); //exclude cuda initialization ops
 				if(cmdargs.basic) {
 					gettimeofday(&t_start, NULL); //don't time transfer
 				    fdas_cuda_basic_stream(&fftplans1, &gpuarrays1, &cmdargs, &params, stream1);
@@ -307,7 +308,7 @@ void acceleration_fdas(int range,
 					if (enable_output_fdas_list == 1)
 					{
 						if(list_size>0)
-							fdas_write_list(&gpuarrays1, &cmdargs, &params, h_MSD1, dm_low[i], dm_count, dm_step[i], list_size);
+							fdas_write_list_stream(&gpuarrays1, &cmdargs, &params, h_MSD1, dm_low[i], dm_count, dm_step[i], list_size, stream1);
 					}
 				}
 				if (enable_output_ffdot_plan == 1)
@@ -320,7 +321,6 @@ void acceleration_fdas(int range,
 
 				/*********************************** stream2 *********************************************************/
 
-				cudaProfilerStart(); //exclude cuda initialization ops
 				if(cmdargs.basic) {
 					gettimeofday(&t_start, NULL); //don't time transfer
 				    fdas_cuda_basic_stream(&fftplans2, &gpuarrays2, &cmdargs, &params, stream2);
@@ -370,7 +370,7 @@ void acceleration_fdas(int range,
 					if (enable_output_fdas_list == 1)
 					{
 						if(list_size>0)
-							fdas_write_list(&gpuarrays2, &cmdargs, &params, h_MSD2, dm_low[i], dm_count, dm_step[i], list_size);
+							fdas_write_list_stream(&gpuarrays2, &cmdargs, &params, h_MSD2, dm_low[i], dm_count, dm_step[i], list_size, stream2);
 					}
 				}
 				if (enable_output_ffdot_plan == 1)
@@ -379,6 +379,7 @@ void acceleration_fdas(int range,
 				}
 			}
 		}
+		cudaProfilerStop();
 
 		cufftDestroy(fftplans1.realplan);
 	    cufftDestroy(fftplans1.forwardplan);

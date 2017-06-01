@@ -12,7 +12,7 @@ max_boxcar_width_in_sec 0.5
 analysis
 acceleration
 -output_ffdot_plan
--output_fdas_list
+output_fdas_list
 -periodicity
 -output_dmt
 -zero_dm

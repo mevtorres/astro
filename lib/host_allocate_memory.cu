@@ -26,18 +26,18 @@ void allocate_memory_cpu_output(FILE **fp, size_t gpu_memory, int maxshift, int 
 {
 
 	*outputsize = 0;
-	*output_buffer = (float ***) malloc(range * sizeof(float **));
+	cudaMallocHost((void**)&(*output_buffer), range * sizeof(float **));
 	for (int i = 0; i < range; i++)
 	{
 		int total_samps = 0;
 		for (int k = 0; k < num_tchunks; k++)
 			total_samps += t_processed[i][k];
 		//printf("\nTOTSAMPS:\t%d %d", total_samps, i);
-		( *output_buffer )[i] = (float **) malloc(ndms[i] * sizeof(float *));
+		cudaMallocHost((void**)&((*output_buffer)[i]),ndms[i] * sizeof(float *));
 		//if((*output_buffer)[i]) printf("\n FAILED! Could not allocate %zu bytes", ndms[i]*sizeof(float *));
 		for (int j = 0; j < ndms[i]; j++)
 		{
-			( *output_buffer )[i][j] = (float *) malloc(( total_samps ) * sizeof(float));
+			cudaMallocHost((void**)&((*output_buffer)[i][j]) ,( total_samps ) * sizeof(float));
 			//if((*output_buffer)[i][j]) printf("\n FAILED! Could not allocate %zu bytes", ndms[i]*sizeof(float *));
 //			memset((*output_buffer)[i][j],0.0f,(total_samps)*sizeof(float));
 		}
