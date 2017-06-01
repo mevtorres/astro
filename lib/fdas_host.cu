@@ -611,7 +611,7 @@ void fdas_write_list_stream(fdas_gpuarrays *gpuarrays, cmd_args *cmdargs, fdas_p
 		printf("Number of peaks:%d; mean:%f; strdev:%f\n", list_size, h_MSD[0], h_MSD[1]);
 
 		float *h_fdas_peak_list=NULL;
-		cudaMalloc((void**)&h_fdas_peak_list, list_size*4*sizeof(float));
+		cudaMallocHost((void**)&h_fdas_peak_list, list_size*4*sizeof(float));
 		checkCudaErrors(cudaMemcpyAsync(h_fdas_peak_list, gpuarrays->d_fdas_peak_list, list_size*4*sizeof(float), cudaMemcpyDeviceToHost, stream));
 
 		//prepare file
