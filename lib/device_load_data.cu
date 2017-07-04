@@ -34,3 +34,31 @@ void load_data(int i, int *inBin, unsigned short *device_pointer, unsigned short
 }
 
 //}}}
+
+void load_data_stream(int i, int *inBin, unsigned short *device_pointer, unsigned short *host_pointer, int t_processed, int maxshift, int nchans, float *dmshifts, cudaStream_t stream)
+{
+
+	//{{{ Copy data and set up the GPU constants/variables.
+	if (i == -1)
+	{
+		int length = ( t_processed + maxshift );
+		size_t size = nchans * length * sizeof(unsigned short);
+		cudaMemcpyToSymbol(dm_shifts, dmshifts, nchans * sizeof(float));
+		cudaMemcpy(device_pointer, host_pointer, size, cudaMemcpyHostToDevice);
+		cudaMemcpyToSymbol(i_nchans, &nchans, sizeof(int));
+		cudaMemcpyToSymbol(i_nsamp, &length, sizeof(int));
+		cudaMemcpyToSymbol(i_t_processed_s, &t_processed, sizeof(int));
+	}
+	else if (i > 0)
+	{
+		int length = ( t_processed + maxshift );
+		cudaMemcpyToSymbol(i_nsamp, &length, sizeof(int));
+		cudaMemcpyToSymbol(i_t_processed_s, &t_processed, sizeof(int));
+	}
+	//}}}
+
+	float h_sqrt_taps[PD_MAXTAPS + 1];
+	for (int f = 0; f <= PD_MAXTAPS; f++)
+		h_sqrt_taps[f] = (float) sqrt((double) f);
+	cudaMemcpyToSymbol(c_sqrt_taps, h_sqrt_taps, ( PD_MAXTAPS + 1 ) * sizeof(float));
+}

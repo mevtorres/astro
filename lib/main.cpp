@@ -120,7 +120,7 @@ int main(int argc, char* argv[])
 		nsamp, gpu_inputsize, gpu_outputsize, inputsize, outputsize);
 
 	// Allocate memory on host.
-	allocate_memory_cpu_input(&fp, gpu_memory, maxshift, num_tchunks, max_ndms,
+	allocate_memory_cpu_input_stream(&fp, gpu_memory, maxshift, num_tchunks, max_ndms,
 	  total_ndms, nsamp, nchans, nbits, range, ndms, t_processed, &input_buffer,
 	  &output_buffer, &d_input, &d_output, &gpu_inputsize, &gpu_outputsize,
 	  &inputsize, &outputsize);
@@ -168,7 +168,7 @@ int main(int argc, char* argv[])
 
 	fclose(fp);
 
-	free(output_buffer);
+	cudaFreeHost(output_buffer);
 	free(t_processed);
 	free(dm_low);
 	free(dm_high);
