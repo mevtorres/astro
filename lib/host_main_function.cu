@@ -227,7 +227,7 @@ void main_function
 		/******************* streams start here ******************/
 		printf("\n\n%f\t%f\t%f\t%d", dm_low[0], dm_high[0], dm_step[0], ndms[0]), fflush(stdout);
 		printf("\nAmount of telescope time processed: %f", tstart_local);
-		maxshift = maxshift_original / inBin[dm_range];
+		maxshift = maxshift_original / inBin[0];
 		checkCudaErrors(cudaGetLastError());
 		load_data(0, inBin, d_input, &input_buffer[(long int) ( inc * nchans )], t_processed[0][t], maxshift, nchans, dmshifts);
 		checkCudaErrors(cudaGetLastError());
@@ -257,7 +257,7 @@ void main_function
 			// bin stream2
 			if (inBin[dm_range] > oldBin)
 			{
-				bin_gpu_stream(d_input, d_output, nchans, t_processed[dm_range - 1][t] + maxshift * inBin[dm_range], stream2);
+				bin_gpu_stream(d_input, d_output, nchans, t_processed[dm_range][t] + maxshift * inBin[dm_range], stream2);
 				( tsamp ) = ( tsamp ) * 2.0f;
 			}
 			checkCudaErrors(cudaGetLastError());
@@ -287,7 +287,7 @@ void main_function
 					//h_peak_list   = (float*) malloc(max_peak_size*4*sizeof(float));
 					cudaMallocHost((void**)&(h_peak_list), max_peak_size*4*sizeof(float));
 					peak_pos=0;
-					analysis_GPU_stream(h_peak_list, &peak_pos, max_peak_size, dm_range-1, tstart_local, t_processed[dm_range-1][t], inBin[dm_range-1], outBin[dm_range], &maxshift, max_ndms, ndms, sigma_cutoff, sigma_constant, max_boxcar_width_in_sec, d_output, dm_low, dm_high, dm_step, tsamp, candidate_algorithm, enable_sps_baselinenoise, stream1);
+					analysis_GPU_stream(h_peak_list, &peak_pos, max_peak_size, dm_range-1, tstart_local, t_processed[dm_range-1][t], inBin[dm_range-1], outBin[dm_range-1], &maxshift, max_ndms, ndms, sigma_cutoff, sigma_constant, max_boxcar_width_in_sec, d_output, dm_low, dm_high, dm_step, tsamp, candidate_algorithm, enable_sps_baselinenoise, stream1);
 					cudaFreeHost(h_peak_list);
 				}
 			}
@@ -384,7 +384,7 @@ void main_function
 				max_peak_size = (size_t) ( ndms[range-1]*t_processed[range-1][t]/2 );
 				cudaMallocHost((void**)&(h_peak_list), max_peak_size*4*sizeof(float));
 				peak_pos=0;
-				analysis_GPU_stream(h_peak_list, &peak_pos, max_peak_size, dm_range, tstart_local, t_processed[range-1][t], inBin[range-1], outBin[range-1], &maxshift, max_ndms, ndms, sigma_cutoff, sigma_constant, max_boxcar_width_in_sec, d_output, dm_low, dm_high, dm_step, tsamp, candidate_algorithm, enable_sps_baselinenoise, stream1);
+				analysis_GPU_stream(h_peak_list, &peak_pos, max_peak_size, range-1, tstart_local, t_processed[range-1][t], inBin[range-1], outBin[range-1], &maxshift, max_ndms, ndms, sigma_cutoff, sigma_constant, max_boxcar_width_in_sec, d_output, dm_low, dm_high, dm_step, tsamp, candidate_algorithm, enable_sps_baselinenoise, stream1);
 				cudaFreeHost(h_peak_list);
 			}
 		}
