@@ -229,7 +229,7 @@ void main_function
 		printf("\nAmount of telescope time processed: %f", tstart_local);
 		maxshift = maxshift_original / inBin[0];
 		checkCudaErrors(cudaGetLastError());
-		load_data(0, inBin, d_input, &input_buffer[(long int) ( inc * nchans )], t_processed[0][t], maxshift, nchans, dmshifts);
+		load_data_stream(0, inBin, d_input, &input_buffer[(long int) ( inc * nchans )], t_processed[0][t], maxshift, nchans, dmshifts, stream1);
 		checkCudaErrors(cudaGetLastError());
 		// no bin_gpu needed here
 		// dedispersion stream 1
@@ -251,7 +251,7 @@ void main_function
 			printf("\nAmount of telescope time processed: %f", tstart_local);
 			maxshift = maxshift_original / inBin[dm_range];
 			checkCudaErrors(cudaGetLastError());
-			load_data(dm_range, inBin, d_input, &input_buffer[(long int) ( inc * nchans )], t_processed[dm_range][t], maxshift, nchans, dmshifts);
+			load_data_stream(dm_range, inBin, d_input, &input_buffer[(long int) ( inc * nchans )], t_processed[dm_range][t], maxshift, nchans, dmshifts, stream2);
 			checkCudaErrors(cudaGetLastError());
 
 			// bin stream2
@@ -308,7 +308,7 @@ void main_function
 				printf("\nAmount of telescope time processed: %f", tstart_local);
 				maxshift = maxshift_original / inBin[dm_range+1];
 
-				load_data(dm_range+1, inBin, d_input, &input_buffer[(long int) ( inc * nchans )], t_processed[dm_range+1][t], maxshift, nchans, dmshifts);
+				load_data_stream(dm_range+1, inBin, d_input, &input_buffer[(long int) ( inc * nchans )], t_processed[dm_range+1][t], maxshift, nchans, dmshifts, stream2);
 				checkCudaErrors(cudaGetLastError());
 
 				// bin stream1
