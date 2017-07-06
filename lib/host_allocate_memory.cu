@@ -79,7 +79,6 @@ void allocate_memory_cpu_output_stream(FILE **fp, size_t gpu_memory, int maxshif
 
 void allocate_memory_gpu(FILE **fp, size_t gpu_memory, int maxshift, int num_tchunks, int max_ndms, int total_ndms, int nsamp, int nchans, int nbits, int range, int *ndms, int **t_processed, unsigned short **input_buffer, float ****output_buffer, unsigned short **d_input, float **d_output, size_t *gpu_inputsize, size_t *gpu_outputsize, size_t *inputsize, size_t *outputsize)
 {
-
 	int time_samps = t_processed[0][0] + maxshift;
 	printf("\n\n\n%d\n\n\n", time_samps), fflush(stdout);
 	*gpu_inputsize = (size_t) time_samps * (size_t) nchans * sizeof(unsigned short);
@@ -100,4 +99,29 @@ void allocate_memory_gpu(FILE **fp, size_t gpu_memory, int maxshift, int num_tch
 	//printf("\nGPU Malloc in: %f ", time);
 
 	( cudaMemset(*d_output, 0, *gpu_outputsize) );
+}
+
+void allocate_memory_gpu(FILE **fp, size_t gpu_memory, int maxshift, int num_tchunks, int max_ndms, int total_ndms, int nsamp, int nchans, int nbits, int range, int *ndms, int **t_processed, unsigned short **input_buffer, float ****output_buffer, unsigned short **d_input1, float **d_output1, unsigned short **d_input2, float **d_output2, size_t *gpu_inputsize, size_t *gpu_outputsize, size_t *inputsize, size_t *outputsize)
+{
+	int time_samps = t_processed[0][0] + maxshift;
+	printf("\n\n\n%d\n\n\n", time_samps), fflush(stdout);
+	*gpu_inputsize = (size_t) ((time_samps * (size_t) nchans * sizeof(unsigned short))/2);
+	( cudaMalloc((void **) d_input1, *gpu_inputsize) );
+	( cudaMalloc((void **) d_input2, *gpu_inputsize) );
+
+	if (nchans < max_ndms)
+	{
+		*gpu_outputsize = (size_t)((time_samps * (size_t)max_ndms * sizeof(float))/2);
+	}
+	else
+	{
+		*gpu_outputsize = (size_t)((time_samps * (size_t)nchans * sizeof(float))/2);
+	}
+	( cudaMalloc((void **) d_output1, *gpu_outputsize) );
+	( cudaMalloc((void **) d_output2, *gpu_outputsize) );
+	//end_t=omp_get_wtime();
+	//time = (float)(end_t-start_t);
+	//printf("\nGPU Malloc in: %f ", time);
+	( cudaMemset(*d_output1, 0, *gpu_outputsize) );
+	( cudaMemset(*d_output2, 0, *gpu_outputsize) );
 }
