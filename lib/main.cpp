@@ -51,10 +51,8 @@ int main(int argc, char* argv[])
 	size_t gpu_memory = 0;
 	unsigned short *input_buffer = NULL;
 	float ***output_buffer = NULL;
-	unsigned short *d_input1 = NULL;
-	float *d_output1 = NULL;
-	unsigned short *d_input2 = NULL;
-	float *d_output2 = NULL;
+	unsigned short *d_input = NULL;
+	float *d_output = NULL;
 	float *dmshifts = NULL;
 	float *user_dm_low = NULL;
 	float *user_dm_high = NULL;
@@ -124,7 +122,7 @@ int main(int argc, char* argv[])
 	// Allocate memory on host.
 	allocate_memory_cpu_input_stream(&fp, gpu_memory, maxshift, num_tchunks, max_ndms,
 	  total_ndms, nsamp, nchans, nbits, range, ndms, t_processed, &input_buffer,
-	  &output_buffer, &d_input1, &d_output1, &gpu_inputsize, &gpu_outputsize,
+	  &output_buffer, &d_input, &d_output, &gpu_inputsize, &gpu_outputsize,
 	  &inputsize, &outputsize);
 	if (enable_debug == 1)
 		debug(5, start_time, range, outBin, enable_debug, enable_analysis,
@@ -155,7 +153,7 @@ int main(int argc, char* argv[])
 	  outBin, ndms, maxshift, max_ndms, max_samps, num_tchunks, total_ndms, multi_file, max_dm,
 	  // Memory sizes and pointers
 	  inputsize, outputsize, gpu_inputsize, gpu_outputsize, gpu_memory,
-	  input_buffer, output_buffer, d_input1, d_output1, d_input2, d_output2, dmshifts, user_dm_low,
+	  input_buffer, output_buffer, d_input, d_output, dmshifts, user_dm_low,
 	  user_dm_high, user_dm_step, dm_low, dm_high, dm_step,
 	  // Telescope parameters
 	  nchans, nsamp, nbits, nsamples, nifs, t_processed, nboots, ntrial_bins,
