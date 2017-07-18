@@ -33,15 +33,15 @@ __shared__ float f_line_bin[BINARRAYSIZE];
 __global__ void bin(unsigned short *d_input, float *d_output, int in_nsamp)
 {
 
-	int c = ( ( blockIdx.y * BINDIVINF ) + threadIdx.y );
-	int out_nsamp = ( in_nsamp ) / 2;
-	int t_out = ( ( blockIdx.x * BINDIVINT ) + threadIdx.x );
-	int t_in = 2 * t_out;
+	unsigned int c = ( ( blockIdx.y*BINDIVINF ) + threadIdx.y );
+	unsigned int out_nsamp = ( in_nsamp ) / 2;
+	unsigned int t_out = ( ( blockIdx.x*BINDIVINT ) + threadIdx.x );
+	unsigned int t_in = 2*t_out;
 
-	int shift_one = ( ( c * out_nsamp ) + t_out );
-	int shift_two = ( ( c * in_nsamp ) + t_in );
+	unsigned int shift_one = ( ( c*out_nsamp ) + t_out );
+	unsigned int shift_two = ( ( c*in_nsamp ) + t_in );
 
-	d_output[( shift_one )] = (float) ( ( d_input[( shift_two )] + d_input[shift_two + 1] )/2.0f );
+	d_output[( shift_one )] = (float) ( ( d_input[shift_two] + d_input[shift_two + 1] )/2.0f );
 
 }
 

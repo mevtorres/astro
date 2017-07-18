@@ -345,7 +345,7 @@ void analysis_GPU(float *h_peak_list, size_t *peak_pos, size_t max_peak_size, in
 	float h_MSD[3];
 	float *d_MSD;
 	checkCudaErrors(cudaGetLastError());
-	if ( cudaSuccess != cudaMalloc((void**) &d_MSD, sizeof(float)*3)) {printf("Allocation error!\n"); exit(201);}
+	if ( cudaSuccess != cudaMalloc((void**) &d_MSD, sizeof(float)*3)) {printf("Allocation error! analysis MSD\n"); exit(201);}
 	
 
 	total_time = 0;

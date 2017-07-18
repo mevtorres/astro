@@ -203,9 +203,9 @@ int MSD_linear_approximation(float *d_input, float *d_MSD_T, int nTaps, int nDMs
 	
 	if(nBlocks_total>0){
 		//---------> Allocation of temporary memory
-		if ( cudaSuccess != cudaMalloc((void **) &d_output, nBlocks_total*3*sizeof(float))) {printf("Allocation error!\n"); exit(1001);}
-		if ( cudaSuccess != cudaMalloc((void **) &d_output_taps, nBlocks_total*3*sizeof(float))) {printf("Allocation error!\n"); exit(1001);}
-		if ( cudaSuccess != cudaMalloc((void **) &d_MSD_T_base, sizeof(float)*3)) {printf("Allocation error!\n"); exit(1001);}
+		if ( cudaSuccess != cudaMalloc((void **) &d_output, nBlocks_total*3*sizeof(float))) {printf("Allocation error! MSD_linear_approximation\n"); exit(1001);}
+		if ( cudaSuccess != cudaMalloc((void **) &d_output_taps, nBlocks_total*3*sizeof(float))) {printf("Allocation error! MSD_linear_approximation\n"); exit(1001);}
+		if ( cudaSuccess != cudaMalloc((void **) &d_MSD_T_base, sizeof(float)*3)) {printf("Allocation error! MSD_linear_approximation\n"); exit(1001);}
 		
 		//---------> MSD
 		MSD_init();
@@ -293,9 +293,9 @@ int MSD_LA_Nth(float *d_input, float *d_bv_in, float *d_MSD_T, float *d_MSD_DIT,
 	
 	if(nBlocks_total>0){
 		//---------> Allocation of temporary memory
-		if ( cudaSuccess != cudaMalloc((void **) &d_output, nBlocks_total*3*sizeof(float))) {printf("Allocation error!\n"); exit(1001);}
-		if ( cudaSuccess != cudaMalloc((void **) &d_output_FIR, nBlocks_total*3*sizeof(float))) {printf("Allocation error!\n"); exit(1001);}
-		if ( cudaSuccess != cudaMalloc((void **) &d_MSD_T_base, sizeof(float)*3)) {printf("Allocation error!\n"); exit(1001);}
+		if ( cudaSuccess != cudaMalloc((void **) &d_output, nBlocks_total*3*sizeof(float))) {printf("Allocation error! MSD_LA_Nth\n"); exit(1001);}
+		if ( cudaSuccess != cudaMalloc((void **) &d_output_FIR, nBlocks_total*3*sizeof(float))) {printf("Allocation error! MSD_LA_Nth\n"); exit(1001);}
+		if ( cudaSuccess != cudaMalloc((void **) &d_MSD_T_base, sizeof(float)*3)) {printf("Allocation error! MSD_LA_Nth\n"); exit(1001);}
 		
 		//---------> MSD
 		MSD_init();

@@ -30,8 +30,8 @@ __global__ void shared_dedisperse_kernel(int bin, unsigned short *d_input, float
 		local_kernel_two[i] = 0.0f;
 	}
 
-	int idx = ( threadIdx.x + ( threadIdx.y * SDIVINT ) );
-	int nsamp_counter = ( idx + ( blockIdx.x * ( 2 * SNUMREG * SDIVINT ) ) );
+	unsigned int idx = ( threadIdx.x + ( threadIdx.y * SDIVINT ) );
+	unsigned int nsamp_counter = ( idx + ( blockIdx.x * ( 2 * SNUMREG * SDIVINT ) ) );
 
 	float shift_two = ( mstartdm + ( __int2float_rz(blockIdx.y) * SFDIVINDM * mdmstep ) );
 	float shift_one = ( __int2float_rz(threadIdx.y) * mdmstep );

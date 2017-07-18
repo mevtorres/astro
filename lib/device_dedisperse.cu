@@ -25,7 +25,7 @@ void dedisperse(int i, int t_processed, int *inBin, float *dmshifts, unsigned sh
 			if (( ( SDIVINT - 1 ) + ( ( SDIVINDM - 1 ) * SDIVINT ) - 1 ) > lineshift)
 			{
 
-				printf("\nUsing fast shared memory kernel");
+				printf("\nUsing fast shared memory kernel for 16bit and 32bit");
 
 				//{{{ Dedisperse data on the GPU
 				float startdm = dm_low[i];
@@ -66,7 +66,7 @@ void dedisperse(int i, int t_processed, int *inBin, float *dmshifts, unsigned sh
 			if (( ( SDIVINT - 1 ) + ( ( SDIVINDM - 1 ) * SDIVINT ) - 1 ) > lineshift)
 			{
 
-				printf("\nUsing fast shared memory kernel");
+				printf("\nUsing fast shared memory kernel 8bit");
 
 				//{{{ Dedisperse data on the GPU
 				float startdm = dm_low[i];
