@@ -27,6 +27,13 @@
 // experimental and this might not be very useful with real noise
 //#define PS_REUSE_MSD_THROUGH_INBIN
 
+// Memory arrangement
+// 0 code will copy only power of 2 part of given DM trial and perform power of 2 FFT. This copy is performed per DM trial.
+// 1 code will copy processed_nTimesamples but perform power of 2 FFT. This copy is performed as block.
+// 2 code will copy processed_nTimesamples and perform non-power(!) of 2 FFT. This copy is performed as block.
+// Should be set to 0! Other values does not work properly
+#define MEMORY_ARRANGEMENT 0
+
 
 // Perhaps it would be best to collapse the structure to either
 // Inherit from dedispersion plan but introduce additional structure which would index dedispersion range, but the values would be different in dedispersion range Problem would be also how to assign ranges into inBin groups and how to link batches to ranges. Batches to ranges could be done vie Id of the range and inBin groups could be linked via list of ranges, but I'm not sure. 
@@ -95,16 +102,18 @@ class Periodicity_Batch {
 public:
 	int nDMs_per_batch;
 	int nTimesamples;
+	int copy_nTimesamples;
 	int DM_shift;
 	// cuFFT plan? no because cuFFT plan allocates GPU memory
 	MSD_Configuration MSD_conf;
 	std::vector<float> PowerCandidates;
 	std::vector<float> InterbinCandidates;
 
-	Periodicity_Batch(int t_nDMs_per_batch, int t_DM_shift, Dedispersion_Range range, int total_blocks) {
-		nDMs_per_batch = t_nDMs_per_batch;
-		nTimesamples   = range.nTimesamples;
-		DM_shift     = t_DM_shift;
+	Periodicity_Batch(int t_nDMs_per_batch, int t_DM_shift, int t_work_nTimesamples, int t_copy_nTimesamples, int total_blocks) {
+		nDMs_per_batch    = t_nDMs_per_batch;
+		nTimesamples      = t_work_nTimesamples;
+		copy_nTimesamples = t_copy_nTimesamples;
+		DM_shift          = t_DM_shift;
 		
 		MSD_conf = *(new MSD_Configuration((nTimesamples>>1), nDMs_per_batch, 0, total_blocks)); // We divide nTimesamples by 2 because MSD is determined from power spectra (or because of FFT R->C)
 	}
@@ -114,7 +123,7 @@ public:
 	}
 
 	void print() {
-		printf("      Batch: nDMs:%d; nTimesamples:%d; DM shift:%d;\n", nDMs_per_batch, nTimesamples, DM_shift);
+		printf("      Batch: nDMs:%d; nTimesamples:%d; copy_nTimesamples: %d; DM shift:%d;\n", nDMs_per_batch, nTimesamples, copy_nTimesamples, DM_shift);
 		MSD_conf.print();
 	}
 };
@@ -126,42 +135,36 @@ public:
 	std::vector<Periodicity_Batch> batches;
 	int total_MSD_blocks;
 
-	void Create_Batches(int max_nDMs_in_range, int address_shift) {
+	void Create_Batches(int max_nDMs_in_range, int copy_nTimesamples, int address_shift) {
 		int nRepeats, nRest;
 		total_MSD_blocks = 0;
 
 		nRepeats = range.nDMs/max_nDMs_in_range;
 		nRest = range.nDMs - nRepeats*max_nDMs_in_range;
 		for(int f=0; f<nRepeats; f++) {
-			Periodicity_Batch batch(max_nDMs_in_range, f*max_nDMs_in_range, range, total_MSD_blocks+address_shift);
+			Periodicity_Batch batch(max_nDMs_in_range, f*max_nDMs_in_range, range.nTimesamples, copy_nTimesamples, total_MSD_blocks+address_shift);
 			batches.push_back(batch);
 			total_MSD_blocks = total_MSD_blocks + batch.MSD_conf.nBlocks_total;
 			//batches.push_back( *(new Periodicity_Batch(max_nDMs_in_range, f*max_nDMs_in_range, range)) );
 		}
 		if(nRest>0) {
-			Periodicity_Batch batch(nRest, nRepeats*max_nDMs_in_range, range, total_MSD_blocks+address_shift);
+			Periodicity_Batch batch(nRest, nRepeats*max_nDMs_in_range, range.nTimesamples, copy_nTimesamples, total_MSD_blocks+address_shift);
 			batches.push_back(batch);
 			total_MSD_blocks = total_MSD_blocks + batch.MSD_conf.nBlocks_total;
 			//batches.push_back( *(new Periodicity_Batch(nRest, nRepeats*max_nDMs_in_range, range)) );
 		}
 	}
 
-	void Calculate_Range_Properties(Dedispersion_Range t_range) {
-		range = t_range;
-
-		// Finding nearest lower power of two (because of FFT algorithm)
-		int nearest = (int)floorf(log2f((float)range.nTimesamples));
-		range.nTimesamples = (int) powf(2.0, (float) nearest);
-		// This should not be necessary
-		//range.nTimesamples = range.nTimesamples/range.inBin;
-	}
-
-	Periodicity_Range(Dedispersion_Range t_range, int max_nDMs_in_memory, int t_rangeid, int address_shift) {
+	Periodicity_Range(Dedispersion_Range t_range, int t_rangeid, int address_shift, int max_nDMs_in_memory, int work_nTimesamples, int copy_nTimesamples) {
 		int max_nDMs_in_range;
-		Calculate_Range_Properties(t_range);
+		
+		range = t_range;
+		// This is because we might use power of 2 number of time samples or not
+		range.nTimesamples = work_nTimesamples;
+		
 		max_nDMs_in_range = max_nDMs_in_memory*range.inBin;
 		rangeid = t_rangeid;
-		Create_Batches(max_nDMs_in_range, address_shift);
+		Create_Batches(max_nDMs_in_range, copy_nTimesamples, address_shift);
 	}
 
 	~Periodicity_Range() {
@@ -201,6 +204,7 @@ public:
 	int max_nDMs;
 	int max_nDMs_in_memory;
 	size_t input_plane_size;
+	size_t work_plane_size;
 	size_t cuFFT_workarea_size;
 	std::vector<Periodicity_inBin_Group> inBin_group;
 
@@ -218,6 +222,7 @@ public:
 		printf("max_nDMs:             %d DMs;\n", max_nDMs);
 		printf("max_nDMs_in_memory:   %d DMs;\n", max_nDMs_in_memory);
 		printf("input_plane_size:     %zu floating point numbers = %0.2f MB;\n", input_plane_size, ((float) input_plane_size*sizeof(float))/(1024.0*1024.0));
+		printf("work_plane_size:     %zu floating point numbers = %0.2f MB;\n", work_plane_size, ((float) work_plane_size*sizeof(float))/(1024.0*1024.0));
 		printf("cuFFT_workarea_size:  %zu = %0.2f MB;\n", cuFFT_workarea_size, (float) cuFFT_workarea_size/(1024.0*1024.0));
 		for(int f=0; f<(int) inBin_group.size(); f++){
 			printf("inBin group: %d\n", f);
@@ -269,8 +274,9 @@ public:
 		float sampling_time = inBin_group->Prange[rangeid].range.sampling_time;
 		float nTimesamples    = inBin_group->Prange[rangeid].range.nTimesamples;
 		int nPoints_before = size();
-		int nPoints_after;
-
+		
+		printf("Number of candidates: %d\n", nPoints_before);
+		
 		for(int c=0; c<(int)size(); c++) {
 			list[c*el+0] = list[c*el+0]*dm_step + dm_low;
 			list[c*el+1] = list[c*el+1]*(1.0/(sampling_time*nTimesamples*mod));
@@ -332,13 +338,17 @@ public:
 	void *cuFFT_workarea;
 	
 	void Allocate(AA_Periodicity_Plan *P_plan){
-		size_t t_input_plane_size = P_plan->input_plane_size;
+		size_t t_input_plane_size = P_plan->input_plane_size; 
+		size_t t_work_plane_size = P_plan->work_plane_size;
+		// d_one_A serves must hold all time samples from de-dispersion and it serves as input for cuFFT, it must have different size
 		if ( cudaSuccess != cudaMalloc((void **) &d_one_A,  sizeof(float)*t_input_plane_size )) printf("Periodicity Allocation error! d_one_A\n");
-		if ( cudaSuccess != cudaMalloc((void **) &d_two_B,  sizeof(float)*2*t_input_plane_size )) printf("Periodicity Allocation error! d_two_B\n");
-		if ( cudaSuccess != cudaMalloc((void **) &d_half_C,  sizeof(float)*t_input_plane_size/2 )) printf("Periodicity Allocation error! d_spectra_Real\n");
 		
-		if ( cudaSuccess != cudaMalloc((void **) &d_power_harmonics, sizeof(ushort)*t_input_plane_size )) printf("Periodicity Allocation error! d_harmonics\n");
-		if ( cudaSuccess != cudaMalloc((void **) &d_interbin_harmonics, sizeof(ushort)*t_input_plane_size )) printf("Periodicity Allocation error! d_harmonics\n");
+		// rest of the arrays could be smaller as cuFFT will be performed only on number of time samples which are power of 2
+		if ( cudaSuccess != cudaMalloc((void **) &d_two_B,  sizeof(float)*2*t_work_plane_size )) printf("Periodicity Allocation error! d_two_B\n");
+		if ( cudaSuccess != cudaMalloc((void **) &d_half_C,  sizeof(float)*t_work_plane_size/2 )) printf("Periodicity Allocation error! d_spectra_Real\n");
+		
+		if ( cudaSuccess != cudaMalloc((void **) &d_power_harmonics, sizeof(ushort)*t_work_plane_size )) printf("Periodicity Allocation error! d_harmonics\n");
+		if ( cudaSuccess != cudaMalloc((void **) &d_interbin_harmonics, sizeof(ushort)*t_work_plane_size )) printf("Periodicity Allocation error! d_harmonics\n");
 		
 		if ( cudaSuccess != cudaMalloc((void**) &gmem_power_peak_pos, 1*sizeof(int)) )  printf("Periodicity Allocation error! gmem_power_peak_pos\n");
 		if ( cudaSuccess != cudaMalloc((void**) &gmem_interbin_peak_pos, 1*sizeof(int)) )  printf("Periodicity Allocation error! gmem_interbin_peak_pos\n");
@@ -352,14 +362,14 @@ public:
 	
 	void Reset_MSD(){
 		printf("  Resetting MSD variables\n");
-		cudaMemset(d_MSD, 0, MSD_RESULTS_SIZE*sizeof(float));
-		cudaMemset(d_previous_partials, 0, MSD_PARTIAL_SIZE*sizeof(float));
+		checkCudaErrors( cudaMemset(d_MSD, 0, MSD_RESULTS_SIZE*sizeof(float)) );
+		checkCudaErrors( cudaMemset(d_previous_partials, 0, MSD_PARTIAL_SIZE*sizeof(float)) );
 	}
 	
 	void Reset_Candidate_List(){
 		printf("         Resetting candidate lists\n");
-		cudaMemset(gmem_power_peak_pos, 0, sizeof(int));
-		cudaMemset(gmem_interbin_peak_pos, 0, sizeof(int));
+		checkCudaErrors( cudaMemset(gmem_power_peak_pos, 0, sizeof(int)) );
+		checkCudaErrors( cudaMemset(gmem_interbin_peak_pos, 0, sizeof(int)) );
 	}
 	
 	int Get_Number_of_Power_Candidates(){
@@ -403,28 +413,89 @@ public:
 
 
 
+//------------ Memory arrangement stuff ----------------
+int Get_nTimesamples(int nTimesamples){
+	int temp;
+	
+	if(MEMORY_ARRANGEMENT==0 || MEMORY_ARRANGEMENT==1){
+		int nearest = (int)floorf(log2f((float) nTimesamples));
+		temp = (int) powf(2.0, (float) nearest);
+	}
+	else if(MEMORY_ARRANGEMENT==2){
+		temp = nTimesamples;
+	}
+	
+	return(temp);
+}
 
-void Create_DD_plan(Dedispersion_Plan *D_plan, int nRanges, float *dm_low, float *dm_high, float *dm_step, int *inBin, int nTimesamples, int *ndms, float sampling_time){
+void Get_nTimesamples(size_t *work_nTimesamples, size_t *copy_nTimesamples, int processed_nTimesamples){
+	int nearest = (int)floorf(log2f((float) processed_nTimesamples));
+	int temp = (int) powf(2.0, (float) nearest);
+	
+	if(MEMORY_ARRANGEMENT==0){
+		*work_nTimesamples = (size_t) temp;
+		*copy_nTimesamples = (size_t) temp;
+	}
+	else if(MEMORY_ARRANGEMENT==1){
+		*work_nTimesamples = (size_t) temp;
+		*copy_nTimesamples = (size_t) processed_nTimesamples;
+	}
+	else if(MEMORY_ARRANGEMENT==2){
+		*work_nTimesamples = (size_t) processed_nTimesamples;
+		*copy_nTimesamples = (size_t) processed_nTimesamples;
+	}
+}
+
+cufftResult Get_cuFFT_plan(cufftHandle *periodicity_cuFFT_plan, int max_nDMs_in_memory, int work_nTimesamples, int copy_nTimesamples, size_t *cuFFT_workarea_size){
+	cufftResult cufft_error;
+	
+	if(MEMORY_ARRANGEMENT==3){
+		// only power of two sizes, simple plan
+		cufft_error = cufftMakePlan1d(*periodicity_cuFFT_plan, work_nTimesamples, CUFFT_R2C, max_nDMs_in_memory, cuFFT_workarea_size);
+	}
+	else if(MEMORY_ARRANGEMENT==0 || MEMORY_ARRANGEMENT==1 || MEMORY_ARRANGEMENT==2){
+		// input is processed_nTimesamples rest is power2, complicated plan
+		int rank    = 1; // we have 1D DFT
+		int n       = work_nTimesamples; // DFT size
+		int inembed = copy_nTimesamples; // size of the array containing data
+		int istride = 1; // distance between samples within one signal
+		int idist   = copy_nTimesamples; // distance between signals
+		int onembed = (work_nTimesamples>>1)+1; // size of the array containing output data it is t_max_nTimesamples/2 because we are doing  R2C DFT
+		int ostride = 1;
+		int odist   = (work_nTimesamples>>1)+1; 
+		cufft_error = cufftMakePlanMany(*periodicity_cuFFT_plan, rank, &n, &inembed, istride, idist, &onembed, ostride, odist, CUFFT_R2C, max_nDMs_in_memory, cuFFT_workarea_size);
+	}
+	
+	return(cufft_error);
+}
+
+//---------------------------------------------------------<
+
+
+void Create_DD_plan(Dedispersion_Plan *DD_plan, int nRanges, float *dm_low, float *dm_high, float *dm_step, int *inBin, int nTimesamples, int *ndms, float sampling_time){
 	size_t max_nDMs = 0;
 	for(int f=0; f<nRanges; f++){
 		Dedispersion_Range trange;
 		trange.Assign(dm_low[f], dm_high[f], dm_step[f], inBin[f], nTimesamples/inBin[f], ndms[f], sampling_time);
-		D_plan->DD_range.push_back(trange);
+		DD_plan->DD_range.push_back(trange);
 		if(ndms[f]>max_nDMs) max_nDMs = ndms[f];
 	}
 	
-	D_plan->nProcessedTimesamples = nTimesamples;
-	D_plan->max_nDMs = max_nDMs;
-	D_plan->sampling_time = sampling_time;
+	DD_plan->nProcessedTimesamples = nTimesamples;
+	DD_plan->max_nDMs = max_nDMs;
+	DD_plan->sampling_time = sampling_time;
 }
 
-int Calculate_max_nDMs_in_memory(size_t max_nTimesamples, size_t max_nDMs, size_t memory_available, float multiple_float, float multiple_ushort) {
+int Calculate_max_nDMs_in_memory(size_t *t_memory_per_DM, size_t work_nTimesamples, size_t copy_nTimesamples, size_t max_nDMs, size_t memory_available) {
 	int max_nDMs_in_memory, itemp;
-
-	size_t memory_per_DM = ((max_nTimesamples+2)*(multiple_float*sizeof(float) + multiple_ushort*sizeof(ushort)));
-	printf("   Memory required for one DM is %0.3f MB available memory is %0.3f MB %zu\n", memory_per_DM/(1024.0*1024.0), (memory_available*0.95)/(1024.0*1024.0), memory_available);
-	max_nDMs_in_memory = (memory_available*0.98)/((max_nTimesamples+2)*(multiple_float*sizeof(float) + multiple_ushort*sizeof(ushort))); // 1 for real input real, 2 for complex output, 2 for complex cuFFT, 1 for peaks + 1 ushort
-	if((max_nDMs+PHS_NTHREADS)<max_nDMs_in_memory) { //if we can fit all DM trials from largest range into memory then we need to find nearest higher multiple of PHS_NTHREADS
+	
+	float multiple_float  = 4.5; // 2 is for cuFFT temporary + 2 for cuFFT complex output + 0.5 for power spectrum. Interbin power spectrum is stored in the input data array
+	float multiple_ushort = 2.0;
+	size_t memory_per_DM = (work_nTimesamples+2)*( (multiple_float)*sizeof(float) + multiple_ushort*sizeof(ushort) ) + (copy_nTimesamples+2)*sizeof(float);
+	
+	max_nDMs_in_memory = (memory_available*0.98)/memory_per_DM;
+	if( (max_nDMs+PHS_NTHREADS)<max_nDMs_in_memory ) { 
+		//if we can fit all DM trials from largest range into memory then we need to find nearest higher multiple of PHS_NTHREADS
 		itemp = (int)(max_nDMs/PHS_NTHREADS);
 		if((max_nDMs%PHS_NTHREADS)>0) itemp++;
 		max_nDMs_in_memory = itemp*PHS_NTHREADS;
@@ -432,6 +503,7 @@ int Calculate_max_nDMs_in_memory(size_t max_nTimesamples, size_t max_nDMs, size_
 	itemp = (int)(max_nDMs_in_memory/PHS_NTHREADS); // if we cannot fit all DM trials from largest range into memory we find nearest lower multiple of PHS_NTHREADS
 	max_nDMs_in_memory = itemp*PHS_NTHREADS;
 
+	*t_memory_per_DM    = memory_per_DM;
 	return(max_nDMs_in_memory);
 }
 
@@ -440,8 +512,10 @@ void Create_Periodicity_Plan(AA_Periodicity_Plan *P_plan, Dedispersion_Plan *DD_
 	int max_nTimesamples;
 	int max_total_MSD_blocks;
 	
-	int nearest = (int)floorf(log2f((float) DD_plan->nProcessedTimesamples));
-	P_plan->max_nTimesamples     = (int) powf(2.0, (float) nearest);
+	size_t work_nTimesamples, copy_nTimesamples;
+	Get_nTimesamples(&work_nTimesamples, &copy_nTimesamples, DD_plan->nProcessedTimesamples);
+	
+	P_plan->max_nTimesamples     = work_nTimesamples;
 	P_plan->max_nDMs             = DD_plan->max_nDMs;
 	P_plan->max_total_MSD_blocks = 0;
 	
@@ -458,7 +532,8 @@ void Create_Periodicity_Plan(AA_Periodicity_Plan *P_plan, Dedispersion_Plan *DD_
 			oldinBin = localinBin;
 		}
 		
-		Periodicity_Range Prange(DD_plan->DD_range[f], max_nDMs_in_memory, f, P_plan->inBin_group[last].total_MSD_blocks);
+		Get_nTimesamples(&work_nTimesamples, &copy_nTimesamples, DD_plan->DD_range[f].nTimesamples);
+		Periodicity_Range Prange(DD_plan->DD_range[f], f, P_plan->inBin_group[last].total_MSD_blocks, max_nDMs_in_memory, work_nTimesamples, copy_nTimesamples);
 		P_plan->inBin_group[last].Prange.push_back(Prange);
 		P_plan->inBin_group[last].total_MSD_blocks += Prange.total_MSD_blocks;
 		if(max_nTimesamples<Prange.range.nTimesamples) max_nTimesamples = Prange.range.nTimesamples;
@@ -474,36 +549,38 @@ void Create_Periodicity_Plan(AA_Periodicity_Plan *P_plan, Dedispersion_Plan *DD_
 }
 
 void Find_Periodicity_Plan(int *max_nDMs_in_memory, AA_Periodicity_Plan *P_plan, Dedispersion_Plan *DD_plan, size_t memory_available){
-	size_t memory_allocated, memory_for_data;
-	size_t input_plane_size;
+	size_t memory_allocated, memory_for_data, memory_per_DM;
+	size_t input_plane_size, work_plane_size;
 	
-	int nearest = (int)floorf(log2f((float) DD_plan->nProcessedTimesamples));
-	size_t t_max_nTimesamples = (size_t) powf(2.0, (float) nearest);
+	size_t t_max_work_nTimesamples, t_max_copy_nTimesamples;
+	Get_nTimesamples(&t_max_work_nTimesamples, &t_max_copy_nTimesamples, DD_plan->nProcessedTimesamples);
 	size_t t_max_nDMs = (size_t) DD_plan->max_nDMs;
 	size_t t_max_nDMs_in_memory;
 	
-	float multiple_float  = 5.5;
-	float multiple_ushort = 2.0; 
-	
 	printf("--------------------------------- FINDING PERIODICITY PLAN -------------------------------\n");
+	printf("   Memory arrangement: %d; work_nTimesamples: %zu; copy_nTimesamples: %zu;\n", MEMORY_ARRANGEMENT, t_max_work_nTimesamples, t_max_copy_nTimesamples);
 	memory_for_data = memory_available;
 	do {
-		printf("   Memory_for_data: %zu = %0.2f MB\n", memory_for_data, (float) memory_for_data/(1024.0*1024.0));
-		t_max_nDMs_in_memory = Calculate_max_nDMs_in_memory(t_max_nTimesamples, t_max_nDMs, memory_for_data, multiple_float, multiple_ushort);
+		t_max_nDMs_in_memory = Calculate_max_nDMs_in_memory(&memory_per_DM, t_max_work_nTimesamples, t_max_copy_nTimesamples, t_max_nDMs, memory_for_data);
 		if(t_max_nDMs_in_memory==0) { printf("Error not enough memory for periodicity search!"); exit(1); }
-		input_plane_size = (t_max_nTimesamples+2)*t_max_nDMs_in_memory;
-		memory_allocated = input_plane_size*multiple_float*sizeof(float) + multiple_ushort*input_plane_size*sizeof(ushort);
-		printf("   Maximum number of DM trials which fit into memory is %zu;\n   Maximum time trials %zu;\n   Input plane size: %0.2f MB;\n", (size_t) t_max_nDMs_in_memory, t_max_nTimesamples, (((float) input_plane_size*sizeof(float))/(1024.0*1024.0)) );
+		input_plane_size = t_max_nDMs_in_memory*(t_max_copy_nTimesamples+2);
+		work_plane_size  = t_max_nDMs_in_memory*(t_max_work_nTimesamples+2);
+		memory_allocated = memory_per_DM*t_max_nDMs_in_memory;
 		
-
+		printf("   Memory required for one DM is %0.3f MB; Available memory is %0.3f MB = %zu bytes;\n", memory_per_DM/(1024.0*1024.0), (memory_for_data*0.95)/(1024.0*1024.0), memory_for_data);
+		printf("   Maximum number of DM trials in dedispersed data: %d;\n   Maximum number of DM trials we can fit into GPU memory: %d;\n", (int) t_max_nDMs, t_max_nDMs_in_memory);
+		printf("   Maximum number of DM trials which fit into memory is %zu;\n   Input plane size: %0.2f MB;\n   Work plane size: %0.2f MB;\n", t_max_nDMs_in_memory, (((float) input_plane_size*sizeof(float))/(1024.0*1024.0)), (((float) work_plane_size*sizeof(float))/(1024.0*1024.0)) );
+		
+		
 		Create_Periodicity_Plan(P_plan, DD_plan, t_max_nDMs_in_memory);
-		//max_total_blocks = Find_Max_total_blocks(P_plan);
 		size_t additional_data_size = P_plan->max_total_MSD_blocks*MSD_RESULTS_SIZE*sizeof(float) + 2*MSD_RESULTS_SIZE*sizeof(float) + 2*sizeof(int);
 		memory_allocated = memory_allocated + additional_data_size;
+		
+		
 		printf("   Memory available for the module: %0.3f MB (%zu bytes)\n", (float) memory_available/(1024.0*1024.0), memory_available);
 		printf("   Memory allocated by the module: %0.3f MB (%zu bytes)\n", (float) memory_allocated/(1024.0*1024.0), memory_allocated);
-
-		if(t_max_nTimesamples!=P_plan->max_nTimesamples) printf("Interesting!\n");
+		
+		if(t_max_work_nTimesamples!=P_plan->max_nTimesamples) printf("Interesting!\n");
 		
 		if(memory_allocated>memory_available) {
 			printf("Not enough memory for given configuration of periodicity plan. Calculating new plan...\n");
@@ -514,28 +591,41 @@ void Find_Periodicity_Plan(int *max_nDMs_in_memory, AA_Periodicity_Plan *P_plan,
 	printf("------------------------------------------------------------------------------------------\n");
 	
 	P_plan->max_nDMs_in_memory = (int) t_max_nDMs_in_memory;
-	P_plan->input_plane_size = (P_plan->max_nTimesamples+2)*t_max_nDMs_in_memory;
+	P_plan->input_plane_size   = input_plane_size;
+	P_plan->work_plane_size    = work_plane_size;
+	
 	//----------------------------------------------
 	//----------> Exact calculation of cuFFT workarea size
-	cufftHandle plan_input;
+	cufftHandle periodicity_cuFFT_plan;
 	cufftResult cufft_error;
 	size_t cuFFT_workarea_size;
-	cufftCreate(&plan_input);
-	cufftSetAutoAllocation(plan_input, false);
-	cufft_error = cufftMakePlan1d(plan_input, P_plan->max_nTimesamples, CUFFT_R2C, t_max_nDMs_in_memory, &cuFFT_workarea_size);
+	
+	
+	cufftCreate(&periodicity_cuFFT_plan);
+	cufftSetAutoAllocation(periodicity_cuFFT_plan, false);
+	cufft_error = Get_cuFFT_plan(&periodicity_cuFFT_plan, t_max_nDMs_in_memory, t_max_work_nTimesamples, t_max_copy_nTimesamples, &cuFFT_workarea_size);
 	if (CUFFT_SUCCESS != cufft_error){
 		printf("CUFFT error: %d", cufft_error);
 	}
-	printf("Workarea size:%0.2f MB\n", (float) cuFFT_workarea_size/(1024.0*1024.0));
-	cufftDestroy(plan_input);
+	cufftDestroy(periodicity_cuFFT_plan);
+	printf("cuFFT workarea size:%0.2f MB\n", (float) cuFFT_workarea_size/(1024.0*1024.0));
+
+	
 	P_plan->cuFFT_workarea_size = cuFFT_workarea_size;
 	//----------------------------------------------<
 	*max_nDMs_in_memory = (int) t_max_nDMs_in_memory;
 }
 
 void Copy_data_for_periodicity_search(float *d_one_A, float **dedispersed_data, Periodicity_Batch *batch){ //TODO add "cudaStream_t stream1"
-	for(int ff=0; ff<batch->nDMs_per_batch; ff++){
-		checkCudaErrors( cudaMemcpy( &d_one_A[ff*batch->nTimesamples], dedispersed_data[batch->DM_shift + ff], batch->nTimesamples*sizeof(float), cudaMemcpyHostToDevice));
+	if(MEMORY_ARRANGEMENT==0){
+		printf("Starting copy from the host\n");
+		for(int ff=0; ff<batch->nDMs_per_batch; ff++){
+			checkCudaErrors( cudaMemcpy( &d_one_A[ff*batch->nTimesamples], dedispersed_data[batch->DM_shift + ff], batch->nTimesamples*sizeof(float), cudaMemcpyHostToDevice) );
+		}
+	}
+	else if(MEMORY_ARRANGEMENT==1 || MEMORY_ARRANGEMENT==2) {
+		printf("Starting copy from the host\n");
+		checkCudaErrors( cudaMemcpy( d_one_A, dedispersed_data[batch->DM_shift], batch->copy_nTimesamples*batch->nDMs_per_batch*sizeof(float), cudaMemcpyHostToDevice ) );
 	}
 }
 
@@ -543,7 +633,66 @@ __inline__ float Calculate_frequency(int m, float sampling_time, int nTimesample
 	return( ((float) m)/(sampling_time*((float) nTimesamples)) );
 }
 
-void Export_data_in_range(float *GPU_data, int nTimesamples, int nDMs, const char *filename, float dm_step, float dm_low, float sampling_time, int outer_DM_shift, int DMs_per_file=100) {
+void Export_data_in_range_CPU(float **dedispersed_data, size_t nTimesamples, size_t nDMs, const char *filename, float dm_step, float dm_low, int outer_DM_shift, int range, int DMs_per_file=100) {
+	char final_filename[100];
+	
+	int lower, higher, inner_DM_shift;
+	if(DMs_per_file<0) DMs_per_file=nDMs;
+	
+	float *h_data;
+	size_t data_size = ((size_t) nTimesamples)*((size_t) nDMs);
+	size_t export_size = ((size_t) nTimesamples)*((size_t) DMs_per_file);
+		
+	int nRepeats = nDMs/DMs_per_file;
+	int nRest = nDMs%DMs_per_file;
+	std::vector<int> chunk_size;
+	for(int f=0; f<nRepeats; f++) chunk_size.push_back(DMs_per_file);
+	if(nRest>0) chunk_size.push_back(nRest);
+	printf("Data will be exported into %d files\n", (int) chunk_size.size());
+	double percent_per_DMtrial = 100.0/(nDMs-outer_DM_shift);
+	
+	h_data = new float[export_size];
+
+	// Write out info file
+	sprintf(final_filename,"%s_%d.txt", filename, range);
+	std::ofstream FILEOUT;
+	FILEOUT.open (final_filename, std::ofstream::out);
+	FILEOUT << nTimesamples << std::endl;
+	FILEOUT << nDMs << std::endl;
+	FILEOUT << DMs_per_file << std::endl;
+	FILEOUT << (int) chunk_size.size() << std::endl;
+	FILEOUT.close();
+	
+	inner_DM_shift = 0;
+	for(int i=0; i<(int) chunk_size.size(); i++){
+		lower = outer_DM_shift + inner_DM_shift;
+		higher = outer_DM_shift + inner_DM_shift + chunk_size[i];
+		sprintf(final_filename,"%s_%d_%d.dat", filename, range, i);
+		//printf("Exporting file %s\n", final_filename);
+		
+		for(size_t d=0; d<chunk_size[i]; d++) {
+			for(size_t t=0; t<nTimesamples; t++) {
+				h_data[d*nTimesamples + t] = dedispersed_data[lower + d][t];
+			}
+		}
+		
+		FILE *fp_out;
+		if (( fp_out = fopen(final_filename, "wb") ) == NULL) {
+			fprintf(stderr, "Error opening output file!\n");
+			exit(0);
+		}
+		fwrite(h_data, nTimesamples*chunk_size[i]*sizeof(float), 1, fp_out);
+		fclose(fp_out);
+		
+		inner_DM_shift = inner_DM_shift + chunk_size[i];
+		printf("Exported: %0.2f%\n", inner_DM_shift*percent_per_DMtrial);
+	}
+	
+	delete [] h_data;
+}
+
+
+void Export_data_in_range_GPU(float *GPU_data, int nTimesamples, int nDMs, const char *filename, float dm_step, float dm_low, float sampling_time, int outer_DM_shift, int DMs_per_file=100) {
 	char final_filename[100];
 	std::ofstream FILEOUT;
 	int lower, higher, inner_DM_shift;
@@ -611,10 +760,11 @@ void Periodicity_search(GPU_Memory_for_Periodicity_Search *gmem, Periodicity_par
 	d_power_list            = &gmem->d_two_B[0];
 	d_interbin_list         = &gmem->d_two_B[input_plane_size];
 	
-	int t_inBin          = inBin;
-	int t_nTimesamples   = batch->nTimesamples;
-	int t_nDMs_per_batch = batch->nDMs_per_batch;
-	int t_DM_shift       = batch->DM_shift;
+	int t_inBin             = inBin;
+	int t_nTimesamples      = batch->nTimesamples;
+	int t_copy_nTimesamples = batch->copy_nTimesamples;
+	int t_nDMs_per_batch    = batch->nDMs_per_batch;
+	int t_DM_shift          = batch->DM_shift;
 	
 	GpuTimer timer;
 	
@@ -630,7 +780,7 @@ void Periodicity_search(GPU_Memory_for_Periodicity_Search *gmem, Periodicity_par
 	cufftCreate(&plan_input);
 	cufftSetAutoAllocation(plan_input, false);
 	
-	cufft_error = cufftMakePlan1d(plan_input, t_nTimesamples, CUFFT_R2C, t_nDMs_per_batch, &cuFFT_workarea_size);
+	cufft_error = Get_cuFFT_plan(&plan_input, t_nDMs_per_batch, t_nTimesamples, t_copy_nTimesamples, &cuFFT_workarea_size);
 	if (CUFFT_SUCCESS != cufft_error){
 		printf("CUFFT error: %d", cufft_error);
 	}
@@ -647,6 +797,7 @@ void Periodicity_search(GPU_Memory_for_Periodicity_Search *gmem, Periodicity_par
 	//---------<
 	
 	checkCudaErrors(cudaGetLastError());
+	
 	
 	//---------> Calculate powers and interbinning
 	timer.Start();
@@ -775,6 +926,9 @@ void GPU_periodicity(int range, int nsamp, int max_ndms, int processed, float si
 	//      ->check is zero-th element does not mess up statistics
 	//      ->prepare data on the host before copying them to device
 	//		->There must by one inBin group per stream. We cannot have batches or Pranges per stream because MSD. :(
+	
+	//printf("Exporting data from range 0\n");
+	//Export_data_in_range_CPU(output_buffer[0], processed/inBin[0], ndms[0], "RAW_data", dm_step[0], dm_low[0], 0, 0);
 	
 	printf("\n");
 	printf("------------ STARTING PERIODICITY SEARCH ------------\n\n");
@@ -936,11 +1090,13 @@ void GPU_periodicity(int range, int nsamp, int max_ndms, int processed, float si
 			
 			#pragma omp parallel for
 			for(int f=0; f<(int)PowerCandidates.size(); f++) {
-				PowerCandidates[f].Rescale_Threshold_and_Process(h_MSD, &P_plan.inBin_group[p], per_param.sigma_cutoff, 1.0);
+				//PowerCandidates[f].Rescale_Threshold_and_Process(h_MSD, &P_plan.inBin_group[p], per_param.sigma_cutoff, 1.0);
+				PowerCandidates[f].Process(h_MSD, &P_plan.inBin_group[p], 1.0);
 			}
 			#pragma omp parallel for
 			for(int f=0; f<(int)InterbinCandidates.size(); f++) {
-				InterbinCandidates[f].Rescale_Threshold_and_Process(h_MSD, &P_plan.inBin_group[p], per_param.sigma_cutoff, 2.0);
+				//InterbinCandidates[f].Rescale_Threshold_and_Process(h_MSD, &P_plan.inBin_group[p], per_param.sigma_cutoff, 2.0);
+				InterbinCandidates[f].Process(h_MSD, &P_plan.inBin_group[p], 2.0);
 			}
 		#endif
 
