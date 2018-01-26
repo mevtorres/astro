@@ -10,12 +10,25 @@
 __global__ void MSD_BLN_pw_rejection_normal(float const* __restrict__ d_input, float *d_output, float *d_MSD, int y_steps, int nTimesamples, int offset, float bln_sigma_constant) {
 	__shared__ float s_input[3*PD_NTHREADS];
 	float M, S, j, ftemp;
-	float limit_down = d_MSD[0] - bln_sigma_constant*d_MSD[1];
-	float limit_up = d_MSD[0] + bln_sigma_constant*d_MSD[1];
+	int gpos = blockIdx.y*gridDim.x + blockIdx.x;
+	float nmod = (d_output[3*gpos+1]/d_output[3*gpos+2])/(d_MSD[1]*d_MSD[1]);
+	if(nmod<1.0) nmod=1.0;
+	float limit_down = d_MSD[0] - (bln_sigma_constant/nmod)*d_MSD[1];
+	float limit_up = d_MSD[0] + (bln_sigma_constant/nmod)*d_MSD[1];
+	
+	
+	
+	if(blockIdx.x<10 && blockIdx.y<5 && threadIdx.x==0) printf("nmod=%f; ratio: %f; nove n: %f\n", nmod, nmod/(d_MSD[1]*d_MSD[1]), (bln_sigma_constant/nmod));
+	
+	
+	
+	
+	
 	
 	int spos = blockIdx.x*PD_NTHREADS + threadIdx.x;
-	int gpos = blockIdx.y*y_steps*nTimesamples + spos;
+	gpos = blockIdx.y*y_steps*nTimesamples + spos;
 	M=0;	S=0;	j=0;
+	
 	if( spos<(nTimesamples-offset) ){
 		
 		for (int yf = 0; yf < y_steps; yf++) {
