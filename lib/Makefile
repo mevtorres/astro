@@ -54,6 +54,7 @@ $(BUILD_DIR)/host_main_function.o:		headers/host_main_function.h
 $(BUILD_DIR)/host_allocate_memory.o:	headers/host_allocate_memory.h
 $(BUILD_DIR)/host_acceleration.o:		headers/host_acceleration.h
 $(BUILD_DIR)/host_analysis.o:			headers/host_analysis.h 
+$(BUILD_DIR)/host_experimental_HRMS.o:	headers/host_experimental_HRMS.h 
 $(BUILD_DIR)/host_periods.o:			headers/host_periods.h 
 $(BUILD_DIR)/host_debug.o:	 			headers/host_debug.h
 $(BUILD_DIR)/host_get_file_data.o: 		headers/host_get_file_data.h
@@ -71,12 +72,12 @@ $(BUILD_DIR)/host_export.o:	 			headers/host_export.h
 #	nvcc -c $(NVCCFLAGS) device_main.cu
 
 $(ASTROLIB_DIR)/libastrolib.a: $(BUILD_DIR)/host_acceleration.o $(BUILD_DIR)/host_write_file.o $(BUILD_DIR)/device_main.o $(BUILD_DIR)/host_allocate_memory.o \
-	$(BUILD_DIR)/host_analysis.o $(BUILD_DIR)/host_periods.o $(BUILD_DIR)/host_debug.o $(BUILD_DIR)/host_get_file_data.o $(BUILD_DIR)/host_get_user_input.o \
+	$(BUILD_DIR)/host_analysis.o $(BUILD_DIR)/host_experimental_HRMS.o $(BUILD_DIR)/host_periods.o $(BUILD_DIR)/host_debug.o $(BUILD_DIR)/host_get_file_data.o $(BUILD_DIR)/host_get_user_input.o \
 	$(BUILD_DIR)/host_get_recorded_data.o $(BUILD_DIR)/host_help.o $(BUILD_DIR)/host_rfi.o $(BUILD_DIR)/host_stratagy.o $(BUILD_DIR)/host_export.o $(BUILD_DIR)/host_statistics.o \
 	$(BUILD_DIR)/host_main_function.o $(BUILD_DIR)/fresnl.o $(BUILD_DIR)/median.o $(BUILD_DIR)/presto_funcs.o $(BUILD_DIR)/characteristics.o $(BUILD_DIR)/dcdflib.o $(BUILD_DIR)/ipmpar.o \
 	$(BUILD_DIR)/fdas_host.o  $(BUILD_DIR)/fdas_device.o $(BUILD_DIR)/fdas_util.o
 	ar rcs $(ASTROLIB_DIR)/libastrolib.a $(BUILD_DIR)/host_acceleration.o $(BUILD_DIR)/host_write_file.o $(BUILD_DIR)/device_main.o $(BUILD_DIR)/host_allocate_memory.o \
-	$(BUILD_DIR)/host_analysis.o $(BUILD_DIR)/host_periods.o $(BUILD_DIR)/host_debug.o $(BUILD_DIR)/host_get_file_data.o $(BUILD_DIR)/host_get_user_input.o \
+	$(BUILD_DIR)/host_analysis.o $(BUILD_DIR)/host_experimental_HRMS.o $(BUILD_DIR)/host_periods.o $(BUILD_DIR)/host_debug.o $(BUILD_DIR)/host_get_file_data.o $(BUILD_DIR)/host_get_user_input.o \
 	$(BUILD_DIR)/host_get_recorded_data.o $(BUILD_DIR)/host_help.o $(BUILD_DIR)/host_rfi.o $(BUILD_DIR)/host_stratagy.o $(BUILD_DIR)/host_export.o $(BUILD_DIR)/host_statistics.o \
 	$(BUILD_DIR)/host_main_function.o $(BUILD_DIR)/fresnl.o $(BUILD_DIR)/median.o $(BUILD_DIR)/presto_funcs.o $(BUILD_DIR)/characteristics.o $(BUILD_DIR)/dcdflib.o $(BUILD_DIR)/ipmpar.o \
 	$(BUILD_DIR)/fdas_host.o  $(BUILD_DIR)/fdas_device.o $(BUILD_DIR)/fdas_util.o

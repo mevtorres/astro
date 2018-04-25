@@ -13,6 +13,8 @@
 #include "headers/device_power.h"
 #include "headers/device_harmonic_summing.h"
 
+#include "headers/host_experimental_HRMS.h"
+
 #include <iostream>
 #include <fstream>
 #include <iomanip>
@@ -608,7 +610,11 @@ void Export_data_in_range(float *GPU_data, int nTimesamples, int nDMs, const cha
 	delete [] h_export;
 }
 
-void Periodicity_search(GPU_Memory_for_Periodicity_Search *gmem, Periodicity_parameters per_param, double *compute_time, size_t input_plane_size, int inBin, Periodicity_Batch *batch, std::vector<int> *h_boxcar_widths){ //TODO add "cudaStream_t stream1"
+void Periodicity_search(GPU_Memory_for_Periodicity_Search *gmem, Periodicity_parameters per_param, double *compute_time, size_t input_plane_size, int inBin, Periodicity_Batch *batch, std::vector<int> *h_boxcar_widths, float dm_step, float dm_low, float dm_high, float sampling_time){ //TODO add "cudaStream_t stream1"
+
+
+
+
 	int local_max_list_size = (input_plane_size)/4;
 	
 	float *d_dedispersed_data, *d_FFT_complex_output, *d_frequency_power, *d_frequency_interbin, *d_frequency_power_CT, *d_frequency_interbin_CT, *d_power_SNR, *d_interbin_SNR, *d_power_list, *d_interbin_list, *d_MSD_workarea;
@@ -688,26 +694,9 @@ void Periodicity_search(GPU_Memory_for_Periodicity_Search *gmem, Periodicity_par
 	#endif
 
 
-	#ifdef OLD_PERIODICITY
-		if(per_param.enable_outlier_rejection==1){
-			#ifdef PS_REUSE_MSD_WITHIN_INBIN
-			MSD_outlier_rejection_grid(gmem->d_MSD, d_frequency_power, gmem->d_previous_partials, gmem->d_all_blocks, &batch->MSD_conf, per_param.OR_sigma_multiplier);
-			#else
-			MSD_outlier_rejection(gmem->d_MSD, d_frequency_power, gmem->d_all_blocks, &batch->MSD_conf, per_param.OR_sigma_multiplier);
-			#endif
-		}
-		else {
-			#ifdef PS_REUSE_MSD_WITHIN_INBIN
-			MSD_normal_continuous(gmem->d_MSD, d_frequency_power, gmem->d_previous_partials, gmem->d_all_blocks, &batch->MSD_conf);
-			#else
-			MSD_normal(gmem->d_MSD, d_frequency_power, gmem->d_all_blocks, &batch->MSD_conf);
-			#endif
-		}
-	#else
-		double total_time, dit_time, MSD_time;
-		MSD_plane_profile(gmem->d_MSD, d_frequency_power, gmem->d_previous_partials, d_MSD_workarea, true, (t_nTimesamples>>1), t_nDMs_per_batch, h_boxcar_widths, 0, 0, 0, per_param.OR_sigma_multiplier, per_param.enable_outlier_rejection, perform_continuous, &total_time, &dit_time, &MSD_time);
-		printf("    MSD time: Total: %f ms; DIT: %f ms; MSD: %f ms;\n", total_time, dit_time, MSD_time);
-	#endif
+	double total_time, dit_time, MSD_time;
+	MSD_plane_profile(gmem->d_MSD, d_frequency_power, gmem->d_previous_partials, d_MSD_workarea, true, (t_nTimesamples>>1), t_nDMs_per_batch, h_boxcar_widths, 0, 0, 0, per_param.OR_sigma_multiplier, per_param.enable_outlier_rejection, perform_continuous, &total_time, &dit_time, &MSD_time);
+	printf("    MSD time: Total: %f ms; DIT: %f ms; MSD: %f ms;\n", total_time, dit_time, MSD_time);
 	
 
 	
@@ -732,14 +721,24 @@ void Periodicity_search(GPU_Memory_for_Periodicity_Search *gmem, Periodicity_par
 	checkCudaErrors(cudaGetLastError());
 	
 	//---------> Harmonic summing
+	
+	
+	//---------> Experimental harmonic summing
+	//--------------> Power only
+	float *tempbuffer;
+	tempbuffer = (float *) malloc( (t_nTimesamples>>1)*t_nDMs_per_batch*sizeof(float));
+	
+	Do_SHRMS(tempbuffer, (t_nTimesamples>>1), t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0);
+	Do_EHRMS(tempbuffer, (t_nTimesamples>>1), t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0);
+	Do_LEHRMS(tempbuffer, (t_nTimesamples>>1), t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0);
+	
+	free(tempbuffer);
+	//---------> Experimental harmonic summing
+	
+	
 	timer.Start();
-	#ifdef OLD_PERIODICITY
-		periodicity_simple_harmonic_summing_old(d_frequency_power_CT, d_power_SNR, gmem->d_power_harmonics, gmem->d_MSD, (t_nTimesamples>>1), t_nDMs_per_batch, per_param.nHarmonics);
-		periodicity_simple_harmonic_summing_old(d_frequency_interbin_CT, d_interbin_SNR, gmem->d_interbin_harmonics, gmem->d_MSD, t_nTimesamples, t_nDMs_per_batch, per_param.nHarmonics);
-	#else
-		periodicity_simple_harmonic_summing(d_frequency_power_CT, d_power_SNR, gmem->d_power_harmonics, gmem->d_MSD, (t_nTimesamples>>1), t_nDMs_per_batch, per_param.nHarmonics);
-		periodicity_simple_harmonic_summing(d_frequency_interbin_CT, d_interbin_SNR, gmem->d_interbin_harmonics, gmem->d_MSD, t_nTimesamples, t_nDMs_per_batch, per_param.nHarmonics);
-	#endif
+	periodicity_simple_harmonic_summing(d_frequency_power_CT, d_power_SNR, gmem->d_power_harmonics, gmem->d_MSD, (t_nTimesamples>>1), t_nDMs_per_batch, per_param.nHarmonics);
+	periodicity_simple_harmonic_summing(d_frequency_interbin_CT, d_interbin_SNR, gmem->d_interbin_harmonics, gmem->d_MSD, t_nTimesamples, t_nDMs_per_batch, per_param.nHarmonics);
 	timer.Stop();
 	printf("         -> harmonic summing took %f ms\n", timer.Elapsed());
 	(*compute_time) = (*compute_time) + timer.Elapsed();
@@ -751,24 +750,15 @@ void Periodicity_search(GPU_Memory_for_Periodicity_Search *gmem, Periodicity_par
 	timer.Start();
 	if(per_param.candidate_algorithm==1){
 		//-------------- Thresholding
-		#ifdef OLD_PERIODICITY
-			Threshold_for_periodicity_old(d_power_SNR, gmem->d_power_harmonics, d_power_list, gmem->gmem_power_peak_pos, gmem->d_MSD, per_param.sigma_cutoff, t_nDMs_per_batch, (t_nTimesamples>>1), t_DM_shift, t_inBin, local_max_list_size);
-			Threshold_for_periodicity_old(d_interbin_SNR, gmem->d_interbin_harmonics, d_interbin_list, gmem->gmem_interbin_peak_pos, gmem->d_MSD, per_param.sigma_cutoff, t_nDMs_per_batch, t_nTimesamples, t_DM_shift, t_inBin, local_max_list_size);
-		#else
-			Threshold_for_periodicity(d_power_SNR, gmem->d_power_harmonics, d_power_list, gmem->gmem_power_peak_pos, gmem->d_MSD, per_param.sigma_cutoff, t_nDMs_per_batch, (t_nTimesamples>>1), t_DM_shift, t_inBin, local_max_list_size);
-			Threshold_for_periodicity(d_interbin_SNR, gmem->d_interbin_harmonics, d_interbin_list, gmem->gmem_interbin_peak_pos, gmem->d_MSD, per_param.sigma_cutoff, t_nDMs_per_batch, t_nTimesamples, t_DM_shift, t_inBin, local_max_list_size);
-		#endif
+		Threshold_for_periodicity(d_power_SNR, gmem->d_power_harmonics, d_power_list, gmem->gmem_power_peak_pos, gmem->d_MSD, per_param.sigma_cutoff, t_nDMs_per_batch, (t_nTimesamples>>1), t_DM_shift, t_inBin, local_max_list_size);
+		Threshold_for_periodicity(d_interbin_SNR, gmem->d_interbin_harmonics, d_interbin_list, gmem->gmem_interbin_peak_pos, gmem->d_MSD, per_param.sigma_cutoff, t_nDMs_per_batch, t_nTimesamples, t_DM_shift, t_inBin, local_max_list_size);
+		
 		//-------------- Thresholding
 	}
 	else {
 		//-------------- Peak finding
-		#ifdef OLD_PERIODICITY
-			Peak_find_for_periodicity_search_old(d_power_SNR, gmem->d_power_harmonics, d_power_list, (t_nTimesamples>>1), t_nDMs_per_batch, per_param.sigma_cutoff, local_max_list_size, gmem->gmem_power_peak_pos, gmem->d_MSD, t_DM_shift, t_inBin);
-			Peak_find_for_periodicity_search_old(d_interbin_SNR, gmem->d_interbin_harmonics, d_interbin_list, t_nTimesamples, t_nDMs_per_batch, per_param.sigma_cutoff, local_max_list_size, gmem->gmem_interbin_peak_pos, gmem->d_MSD, t_DM_shift, t_inBin);
-		#else
-			Peak_find_for_periodicity_search(d_power_SNR, gmem->d_power_harmonics, d_power_list, (t_nTimesamples>>1), t_nDMs_per_batch, per_param.sigma_cutoff, local_max_list_size, gmem->gmem_power_peak_pos, gmem->d_MSD, t_DM_shift, t_inBin);
-			Peak_find_for_periodicity_search(d_interbin_SNR, gmem->d_interbin_harmonics, d_interbin_list, t_nTimesamples, t_nDMs_per_batch, per_param.sigma_cutoff, local_max_list_size, gmem->gmem_interbin_peak_pos, gmem->d_MSD, t_DM_shift, t_inBin);
-		#endif
+		Peak_find_for_periodicity_search(d_power_SNR, gmem->d_power_harmonics, d_power_list, (t_nTimesamples>>1), t_nDMs_per_batch, per_param.sigma_cutoff, local_max_list_size, gmem->gmem_power_peak_pos, gmem->d_MSD, t_DM_shift, t_inBin);
+		Peak_find_for_periodicity_search(d_interbin_SNR, gmem->d_interbin_harmonics, d_interbin_list, t_nTimesamples, t_nDMs_per_batch, per_param.sigma_cutoff, local_max_list_size, gmem->gmem_interbin_peak_pos, gmem->d_MSD, t_DM_shift, t_inBin);
 		//-------------- Peak finding
 	}
 	timer.Stop();
@@ -928,7 +918,7 @@ void GPU_periodicity(int range, int nsamp, int max_ndms, int processed, float si
 				
 				
 				//---------> Periodicity search
-				Periodicity_search(&GPU_memory, per_param, &calc_time_per_range, input_plane_size, P_plan.inBin_group[p].Prange[r].range.inBin, &P_plan.inBin_group[p].Prange[r].batches[b], &h_boxcar_widths);
+				Periodicity_search(&GPU_memory, per_param, &calc_time_per_range, input_plane_size, P_plan.inBin_group[p].Prange[r].range.inBin, &P_plan.inBin_group[p].Prange[r].batches[b], &h_boxcar_widths, P_plan.inBin_group[p].Prange[r].range.dm_step, P_plan.inBin_group[p].Prange[r].range.dm_low, P_plan.inBin_group[p].Prange[r].range.dm_high, P_plan.inBin_group[p].Prange[r].range.sampling_time);
 				//---------<
 				
 				

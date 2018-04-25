@@ -46,6 +46,8 @@
 #include "headers/host_stratagy.h"
 #include "headers/host_write_file.h"
 
+#include "headers/host_experimental_HRMS.h"
+
 // fdas
 #include "headers/device_acceleration_fdas.h"
 
