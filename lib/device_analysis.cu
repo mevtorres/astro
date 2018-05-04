@@ -3,6 +3,10 @@
 //#define GPU_PARTIAL_TIMER
 #define GPU_TIMER
 
+#define PEAK_FILTERING_INSIDE
+
+//#define PEAK_FILTERING_OUTSIDE
+
 #include <vector>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,13 +33,12 @@ void Create_list_of_boxcar_widths(std::vector<int> *boxcar_widths, std::vector<i
 		for(int b=0; b<BC_widths->operator[](f); b++){
 			width = width + DIT_value;
 			if(width<=max_boxcar_width){
-				boxcar_widths->push_back(width);
+			boxcar_widths->push_back(width);
 			}
 		}
 		DIT_value = DIT_value*DIT_factor;
 	}
 }
-
 
 // Extend this to arbitrary size plans
 void Create_PD_plan(std::vector<PulseDetection_plan> *PD_plan, std::vector<int> *BC_widths, int nDMs, int nTimesamples){
@@ -122,7 +125,8 @@ void analysis_GPU(float *h_peak_list, size_t *peak_pos, size_t max_peak_size, in
 	size_t vals;
 	int nTimesamples = t_processed;
 	int nDMs = ndms[i];
-	int temp_peak_pos;
+	int temp_peak_pos = 0;
+	int local_peak_pos = 0;
 	
 	//--------> Benchmarking
 	double total_time=0, MSD_time=0, SPDT_time=0, PF_time=0;
@@ -241,6 +245,12 @@ void analysis_GPU(float *h_peak_list, size_t *peak_pos, size_t max_peak_size, in
 		cudaMalloc((void**) &gmem_peak_pos, 1*sizeof(int));
 		cudaMemset((void*) gmem_peak_pos, 0, sizeof(int));
 		
+		int *gmem_filteredpeak_pos;
+		cudaMalloc((void**) &gmem_filteredpeak_pos, 1*sizeof(int));
+		cudaMemset((void*) gmem_filteredpeak_pos, 0, sizeof(int));
+		size_t d_output_SNR_size = 2*DMs_per_cycle*nTimesamples;
+		size_t d_peak_list_size = DMs_per_cycle*nTimesamples;
+		
 		DM_shift = 0;
 		for(int f=0; f<DM_list.size(); f++) {
 			//-------------- SPDT
@@ -284,6 +294,19 @@ void analysis_GPU(float *h_peak_list, size_t *peak_pos, size_t max_peak_size, in
 			
 			checkCudaErrors(cudaGetLastError());
 			
+			#ifdef PEAK_FILTERING_INSIDE
+				timer.Start();
+				checkCudaErrors(cudaMemcpy(&temp_peak_pos, gmem_peak_pos, sizeof(int), cudaMemcpyDeviceToHost));
+				printf("Number of points before filtering: %d;\n", temp_peak_pos);
+				cudaMemset((void*) gmem_peak_pos, 0, sizeof(int));
+				gpu_Filter_peaks(d_output_SNR, d_peak_list, temp_peak_pos, 14.0, d_peak_list_size/4, gmem_peak_pos);
+				checkCudaErrors(cudaMemcpy(&temp_peak_pos, gmem_peak_pos, sizeof(int), cudaMemcpyDeviceToHost));
+				printf("Number of points after filtering: %d;\n", temp_peak_pos);
+				checkCudaErrors(cudaMemcpy(d_peak_list, d_output_SNR, temp_peak_pos*4*sizeof(float), cudaMemcpyDeviceToDevice));
+				timer.Stop();
+				printf("Peak filtering took: %f\n",timer.Elapsed());
+			#endif
+			
 			checkCudaErrors(cudaMemcpy(&temp_peak_pos, gmem_peak_pos, sizeof(int), cudaMemcpyDeviceToHost));
 			#ifdef GPU_ANALYSIS_DEBUG
 			printf("    temp_peak_pos:%d; host_pos:%zu; max:%zu; local_max:%d;\n", temp_peak_pos, (*peak_pos), max_peak_size, local_max_list_size);
@@ -295,6 +318,7 @@ void analysis_GPU(float *h_peak_list, size_t *peak_pos, size_t max_peak_size, in
 			if( ((*peak_pos) + temp_peak_pos)<max_peak_size){
 				checkCudaErrors(cudaMemcpy(&h_peak_list[(*peak_pos)*4], d_peak_list, temp_peak_pos*4*sizeof(float), cudaMemcpyDeviceToHost));
 				*peak_pos = (*peak_pos) + temp_peak_pos;
+				local_peak_pos = local_peak_pos + temp_peak_pos;
 			}
 			else printf("Error peak list is too small!\n");
 
@@ -302,9 +326,38 @@ void analysis_GPU(float *h_peak_list, size_t *peak_pos, size_t max_peak_size, in
 			cudaMemset((void*) gmem_peak_pos, 0, sizeof(int));
 		}
 		
+		
+		#ifdef PEAK_FILTERING_OUTSIDE
+		//-----------------------------------------------
+		//-------> Peak filtering
+		timer.Start();
+		printf("Number of peaks: %d; which is %f MB; d_output_SNR_size is %f MB;\n", local_peak_pos, (local_peak_pos*4.0*4.0)/(1024.0*1024.0), (d_output_SNR_size*4.0)/(1024.0*1024.0));
+		if(d_output_SNR_size>local_peak_pos*4){
+			printf("Number of points before filtering: %d;\n", local_peak_pos);
+			cudaMemset((void*) d_output_SNR, 0, d_output_SNR_size*sizeof(float));
+			cudaMemset((void*) d_peak_list, 0, d_peak_list_size*sizeof(float));
+			checkCudaErrors(cudaMemcpy(d_output_SNR, h_peak_list, local_peak_pos*4*sizeof(float), cudaMemcpyHostToDevice));
+			
+			gpu_Filter_peaks(d_peak_list, d_output_SNR, local_peak_pos, 14.0, d_peak_list_size/4, gmem_filteredpeak_pos);
+			
+			checkCudaErrors(cudaMemcpy(&temp_peak_pos, gmem_filteredpeak_pos, sizeof(int), cudaMemcpyDeviceToHost));
+			local_peak_pos = temp_peak_pos;
+			printf("Number of points after filtering: %d;\n", local_peak_pos);
+			checkCudaErrors(cudaMemcpy(h_peak_list, d_peak_list, local_peak_pos*4*sizeof(float), cudaMemcpyDeviceToHost));
+		}
+		else {
+			printf("Not enough memory to perform peak filtering!\n");
+		}
+		timer.Stop();
+		printf("Peak filtering took: %f\n",timer.Elapsed());
+		
+		checkCudaErrors(cudaGetLastError());
+		#endif
+		
+		
 		//------------------------> Output
 		#pragma omp parallel for
-		for (int count = 0; count < (*peak_pos); count++){
+		for (int count = 0; count < local_peak_pos; count++){
 			h_peak_list[4*count]     = h_peak_list[4*count]*dm_step[i] + dm_low[i];
 			h_peak_list[4*count + 1] = h_peak_list[4*count + 1]*tsamp + tstart;
 			h_peak_list[4*count + 2] = h_peak_list[4*count + 2];
@@ -320,7 +373,7 @@ void analysis_GPU(float *h_peak_list, size_t *peak_pos, size_t max_peak_size, in
 					fprintf(stderr, "Error opening output file!\n");
 					exit(0);
 				}
-				fwrite(h_peak_list, (*peak_pos)*sizeof(float), 4, fp_out);
+				fwrite(h_peak_list, local_peak_pos*sizeof(float), 4, fp_out);
 				fclose(fp_out);
 			}
 		}
@@ -331,7 +384,7 @@ void analysis_GPU(float *h_peak_list, size_t *peak_pos, size_t max_peak_size, in
 					fprintf(stderr, "Error opening output file!\n");
 					exit(0);
 				}
-				fwrite(h_peak_list, (*peak_pos)*sizeof(float), 4, fp_out);
+				fwrite(h_peak_list, local_peak_pos*sizeof(float), 4, fp_out);
 				fclose(fp_out);
 			}
 		}
@@ -345,6 +398,8 @@ void analysis_GPU(float *h_peak_list, size_t *peak_pos, size_t max_peak_size, in
 		cudaFree(gmem_peak_pos);
 		cudaFree(d_MSD_DIT);
 		cudaFree(d_MSD_interpolated);
+		
+		cudaFree(gmem_filteredpeak_pos);
 
 	}
 	else printf("Error not enough memory to search for pulses\n");

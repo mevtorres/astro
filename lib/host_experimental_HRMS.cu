@@ -156,7 +156,7 @@ void Exp_HRMS_Process(){
 void Exp_HRMS_Threshold(){
 }
 
-void Exp_HRMS_??(){
+void Exp_HRMS(){
 }
 
 void Do_SHRMS(float *input, size_t nTimesamples, size_t nDMs, size_t dm_shift, int nHarmonics, float dm_step, float dm_low, float dm_high, float sampling_time, float mod){

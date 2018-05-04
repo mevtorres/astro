@@ -9,6 +9,7 @@
 #include <vector>
 
 //#define MSD_DEBUG
+//#define MSD_DEBUG_EXPORT_BLOCKS
 
 // TODO:
 // Remove MSD_legacy
@@ -99,6 +100,12 @@ int MSD_outlier_rejection(float *d_MSD, float *d_input, float *d_temp, MSD_Confi
 	float h_MSD[3];
 	MSD_conf->print();
 	#endif
+	#ifdef MSD_DEBUG_EXPORT_BLOCKS
+	float *h_MSD_partials;
+	h_MSD_partials = new float[MSD_conf->nBlocks_total];
+	int blocksx = MSD_conf->nBlocks.x;
+	int blocksy = MSD_conf->nBlocks.y;
+	#endif
 	
 	MSD_init();
 	MSD_GPU_limited<<<MSD_conf->partials_gridSize,MSD_conf->partials_blockSize>>>(d_input, &d_temp[MSD_conf->address*MSD_PARTIAL_SIZE], MSD_conf->nSteps.y, (int) MSD_conf->nTimesamples, (int) MSD_conf->offset);
@@ -107,6 +114,18 @@ int MSD_outlier_rejection(float *d_MSD, float *d_input, float *d_temp, MSD_Confi
 	cudaMemcpy(h_MSD, d_MSD, 3*sizeof(float), cudaMemcpyDeviceToHost); 
 	printf("Before outlier rejection: Mean: %e, Standard deviation: %e; Elements:%zu;\n", h_MSD[0], h_MSD[1], (size_t) h_MSD[2]);
 	printf("---------------------------<\n");
+	#endif
+	#ifdef MSD_DEBUG_EXPORT_BLOCKS
+	cudaMemcpy(h_MSD_partials, d_temp, MSD_PARTIAL_SIZE*MSD_conf->nBlocks_total*sizeof(float), cudaMemcpyDeviceToHost);
+	printf("Warning printing out a lot of stuff!!\n");
+	printf("++++++++++++++++++++ StDev ++++++++++++++++++++++++++++++++\n");
+	for(int x=0; x<MSD_conf->nBlocks.x; x++){
+		for(int y=0; y<MSD_conf->nBlocks.y; y++){
+			int pos = MSD_PARTIAL_SIZE*y*MSD_conf->nBlocks.y + x*MSD_PARTIAL_SIZE;
+			printf("%f ",sqrt(h_MSD_partials[pos+1]/h_MSD_partials[pos+2]));
+		}
+	}
+	printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
 	#endif
 	for(int i=0; i<5; i++){
 		MSD_BLN_pw_rejection_normal<<<MSD_conf->partials_gridSize,MSD_conf->partials_blockSize>>>(d_input, &d_temp[MSD_conf->address*MSD_PARTIAL_SIZE], d_MSD,  MSD_conf->nSteps.y, (int) MSD_conf->nTimesamples, (int) MSD_conf->offset, OR_sigma_multiplier);
@@ -124,6 +143,9 @@ int MSD_outlier_rejection(float *d_MSD, float *d_input, float *d_temp, MSD_Confi
 	printf("---------------------------<\n");
 	#endif
 	
+	#ifdef MSD_DEBUG_EXPORT_BLOCKS
+	delete[] h_MSD_partials;
+	#endif	
 	return(0);
 }
 

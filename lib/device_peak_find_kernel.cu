@@ -532,6 +532,89 @@ __global__ void dilate_peak_find_for_periods(const float *d_input, ushort* d_inp
 
 
 
+__global__ void gpu_Filter_peaks_kernel(float4 *d_new_peak_list, float4 *d_peak_list, unsigned int nElements, float max_distance, int nLoops, int max_list_pos, int *gmem_pos){
+	// PPF_DPB = 128 //this is because I set nThreads to 64
+	// PPF_PEAKS_PER_BLOCK = something small like 10
+	__shared__ float s_data[3*PPF_DPB];
+	__shared__ int s_flag[(PPF_DPB>>1)];
+	unsigned int elements_pos, pos;
+	float d,s,snr, distance, fd, fs;
+	float4 f4temp;
+	
+	elements_pos = blockIdx.x*PPF_PEAKS_PER_BLOCK;
+	if(threadIdx.x<PPF_PEAKS_PER_BLOCK) s_flag[threadIdx.x]=1;
+	
+	for(int f=0; f<nLoops; f++){
+		// Load new data blob
+		//s_data[threadIdx.x + 2*PPF_DPB] = 0; // SNR
+		//s_data[threadIdx.x + 64 + 2*PPF_DPB] = 0; // SNR
+		
+		pos = PPF_DPB*f + threadIdx.x;
+		//if(pos<nElements){
+			f4temp = __ldg(&d_peak_list[pos]);
+			s_data[threadIdx.x            ] = f4temp.x; // DM
+			s_data[threadIdx.x +   PPF_DPB] = f4temp.y; // Time
+			s_data[threadIdx.x + 2*PPF_DPB] = f4temp.z; // SNR
+		//}
+		//if(blockIdx.x==0 && threadIdx.x==0) printf("point: [%f;%f;%f;%f] - ",  f4temp.x, f4temp.y, f4temp.z, f4temp.w);
+		
+		
+		pos = PPF_DPB*f + threadIdx.x + (PPF_DPB>>1);
+		//if(pos<nElements){
+			f4temp = __ldg(&d_peak_list[PPF_DPB*f + threadIdx.x + (PPF_DPB>>1)]);
+			s_data[threadIdx.x + 64            ] = f4temp.x; // DM
+			s_data[threadIdx.x + 64 +   PPF_DPB] = f4temp.y; // Time
+			s_data[threadIdx.x + 64 + 2*PPF_DPB] = f4temp.z; // SNR
+		//}
+		
+		__syncthreads();
+		
+		for(int p=0; p<PPF_PEAKS_PER_BLOCK; p++){
+			if(s_flag[p]){
+				//pos = elements_pos+p;
+				//if(pos<nElements){
+					d   = d_peak_list[elements_pos+p].x;
+					s   = d_peak_list[elements_pos+p].y;
+					snr = d_peak_list[elements_pos+p].z;
+					
+					// first element
+					if(s_data[threadIdx.x + 2*PPF_DPB]>snr){
+						fs = (s_data[threadIdx.x] - d);
+						fd = (s_data[threadIdx.x + PPF_DPB] - s);
+						distance = fd*fd + fs*fs;
+						if(distance<max_distance){
+							//if(blockIdx.x==0) printf("distance: %f; - 
+							s_flag[p]=0;
+						}
+					}
+					
+					//second element
+					if(s_data[threadIdx.x + 2*PPF_DPB + 64]>snr){
+						fs = (s_data[threadIdx.x + 64] - d);
+						fd = (s_data[threadIdx.x + PPF_DPB + 64] - s);
+						distance = fd*fd + fs*fs;
+						if(distance<max_distance){
+							s_flag[p]=0;
+						}
+					}
+				//}
+			}
+		} // for p
+		
+	}
+	
+	// Saving peaks that got through
+	if(threadIdx.x<PPF_PEAKS_PER_BLOCK){
+		if(s_flag[threadIdx.x]>0){
+			int list_pos=atomicAdd(gmem_pos, 1);
+			if(list_pos<max_list_pos){
+				d_new_peak_list[list_pos] = d_peak_list[elements_pos+threadIdx.x];
+			}
+		}
+	}
+}
+
+
 
 
 

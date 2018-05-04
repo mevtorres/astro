@@ -70,6 +70,9 @@
 #define PPF_L1_THREADS_PER_BLOCK 256
 #define PPF_L1_SPECTRA_PER_BLOCK 5
 
+//Experimental peak finding
+#define PPF_PEAKS_PER_BLOCK 10
+#define PPF_DPB 128
 // TITAN V
 //#define UNROLLS 4
 //#define SNUMREG 16
@@ -77,7 +80,7 @@
 //#define SDIVINDM 60
 //#define SFDIVINDM 60.0f
 
-// Ussual
+// Usual
 #define UNROLLS 8
 #define SNUMREG 8
 #define SDIVINT 14

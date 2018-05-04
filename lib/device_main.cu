@@ -44,6 +44,7 @@
 #include "device_zero_dm_outliers.cu"
 #include "device_rfi.cu"
 #include "device_analysis.cu" //Added by KA
+#include "device_analysis_global.cu" //Added by KA
 #include "device_periods.cu" //Added by KA
 
 // fdas
