@@ -727,10 +727,11 @@ void Periodicity_search(GPU_Memory_for_Periodicity_Search *gmem, Periodicity_par
 	//--------------> Power only
 	float *tempbuffer;
 	tempbuffer = (float *) malloc( (t_nTimesamples>>1)*t_nDMs_per_batch*sizeof(float));
+	checkCudaErrors(cudaMemcpy(tempbuffer, d_frequency_power, (t_nTimesamples>>1)*t_nDMs_per_batch*sizeof(float), cudaMemcpyDeviceToHost));
 	
-	Do_SHRMS(tempbuffer, (t_nTimesamples>>1), t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0);
-	Do_EHRMS(tempbuffer, (t_nTimesamples>>1), t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0);
-	Do_LEHRMS(tempbuffer, (t_nTimesamples>>1), t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0);
+	Do_SHRMS(tempbuffer, t_nTimesamples, t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0, per_param.sigma_cutoff);
+	Do_EHRMS(tempbuffer, t_nTimesamples, t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0, per_param.sigma_cutoff);
+	Do_LEHRMS(tempbuffer, t_nTimesamples, t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0, per_param.sigma_cutoff);
 	
 	free(tempbuffer);
 	//---------> Experimental harmonic summing

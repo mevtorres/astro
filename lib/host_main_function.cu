@@ -60,6 +60,7 @@
 
 
 //#define EXPORT_DD_DATA
+//#define ENABLE_GLOBAL_ANALYSIS
 
 void main_function
 	(
@@ -376,7 +377,9 @@ void main_function
 	float size_gb = ( nchans * ( t_processed[0][0] ) * sizeof(float) * 8 ) / 1000000000.0;
 	printf("\nTelescope data throughput in Gb/s: %f", size_gb / time_in_sec);
 
-	analysis_global_GPU(output_buffer, range, inc, dm_low, dm_high, dm_step, inBin, ndms, tsamp, max_boxcar_width_in_sec, sigma_cutoff, candidate_algorithm, enable_sps_baselinenoise, sigma_constant);
+	#ifdef ENABLE_GLOBAL_ANALYSIS
+		analysis_global_GPU(output_buffer, range, inc, dm_low, dm_high, dm_step, inBin, ndms, tsamp, max_boxcar_width_in_sec, sigma_cutoff, candidate_algorithm, enable_sps_baselinenoise, sigma_constant);
+	#endif
 	if (enable_periodicity == 1) {
 		//
 		GpuTimer timer;
