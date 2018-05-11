@@ -23,7 +23,7 @@
 #define GPU_PERIODICITY_SEARCH_DEBUG
 
 // define to reuse old MSD results to generate a new one (it means new MSD is calculated from more samples) (WORKING WITHIN SAME INBIN VALUE)
-#define PS_REUSE_MSD_WITHIN_INBIN
+//#define PS_REUSE_MSD_WITHIN_INBIN
 
 // experimental and this might not be very useful with real noise BROKEN!
 //#define PS_REUSE_MSD_THROUGH_INBIN
@@ -729,6 +729,7 @@ void Periodicity_search(GPU_Memory_for_Periodicity_Search *gmem, Periodicity_par
 	tempbuffer = (float *) malloc( (t_nTimesamples>>1)*t_nDMs_per_batch*sizeof(float));
 	checkCudaErrors(cudaMemcpy(tempbuffer, d_frequency_power, (t_nTimesamples>>1)*t_nDMs_per_batch*sizeof(float), cudaMemcpyDeviceToHost));
 	
+	Do_PHRMS(tempbuffer, t_nTimesamples, t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0, per_param.sigma_cutoff);
 	Do_SHRMS(tempbuffer, t_nTimesamples, t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0, per_param.sigma_cutoff);
 	Do_EHRMS(tempbuffer, t_nTimesamples, t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0, per_param.sigma_cutoff);
 	Do_LEHRMS(tempbuffer, t_nTimesamples, t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0, per_param.sigma_cutoff);
