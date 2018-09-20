@@ -446,6 +446,7 @@ public:
 		for(int f=1; f<nHarmonics; f++){
 			size_t tpos;
 			mHS[f] = find_max(&partial_sums[data_shift], f+1, &tpos);
+			data_shift = data_shift + f + 1;
 		}
 		
 		// find highest SNR
@@ -563,7 +564,6 @@ public:
 		float  t_SNR = 0;
 		for(int f=0; f<nHarmonics; f++) mHS[f] = (mHS[f]-mean_array[f+1])/(stdev_array[f+1]);
 		t_SNR = find_max(mHS, nHarmonics, &t_SNR_harmonic);
-		
 		delete[] mHS;
 		
 		*SNR_harmonic = t_SNR_harmonic;
@@ -579,16 +579,19 @@ public:
 		Find_MSD_array(data);
 		
 		printf("Harmonic summing...\n");
-		#pragma omp parallel for
-		for(size_t d=0; d<nDMs; d++){
-			for(size_t t=1; t<nSamples; t++){
+		for(int d=0; d<nDMs; d++){
+			printf("|");
+			fflush(stdout);
+			//#pragma omp parallel for
+			for(int t=1; t<nSamples; t++){
 				float SNR = 0;
 				int SNR_width = 0;
 				Find_highest_SNR(data, t, d, &SNR, &SNR_width);
-				result[t] = SNR;
-				result_harmonics[t] = SNR_width;
+				result[d*nSamples + t] = SNR;
+				result_harmonics[d*nSamples + t] = SNR_width;
 			}
 		}
+		printf("\n");
 		printf("----------------------<\n");
 	}
 	

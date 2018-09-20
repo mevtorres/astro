@@ -610,10 +610,7 @@ void Export_data_in_range(float *GPU_data, int nTimesamples, int nDMs, const cha
 	delete [] h_export;
 }
 
-void Periodicity_search(GPU_Memory_for_Periodicity_Search *gmem, Periodicity_parameters per_param, double *compute_time, size_t input_plane_size, int inBin, Periodicity_Batch *batch, std::vector<int> *h_boxcar_widths, float dm_step, float dm_low, float dm_high, float sampling_time){ //TODO add "cudaStream_t stream1"
-
-
-
+void Periodicity_search(GPU_Memory_for_Periodicity_Search *gmem, Periodicity_parameters per_param, double *compute_time, size_t input_plane_size, int inBin, Periodicity_Batch *batch, std::vector<int> *h_boxcar_widths, float dm_step, float dm_low, float dm_high, float sampling_time){
 
 	int local_max_list_size = (input_plane_size)/4;
 	
@@ -729,9 +726,15 @@ void Periodicity_search(GPU_Memory_for_Periodicity_Search *gmem, Periodicity_par
 	tempbuffer = (float *) malloc( (t_nTimesamples>>1)*t_nDMs_per_batch*sizeof(float));
 	checkCudaErrors(cudaMemcpy(tempbuffer, d_frequency_power, (t_nTimesamples>>1)*t_nDMs_per_batch*sizeof(float), cudaMemcpyDeviceToHost));
 	
+	// Pointwise harmonic summing
 	Do_PHRMS(tempbuffer, t_nTimesamples, t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0, per_param.sigma_cutoff);
+	// MaxDIT harmonic suming
 	Do_SHRMS(tempbuffer, t_nTimesamples, t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0, per_param.sigma_cutoff);
-	Do_EHRMS(tempbuffer, t_nTimesamples, t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0, per_param.sigma_cutoff);
+	// Exhaustive harmonic summing
+	if( (dm_low + t_DM_shift*dm_step)<50 && (dm_low + (t_DM_shift + t_nDMs_per_batch)*dm_step)>50 ){
+		Do_EHRMS(tempbuffer, t_nTimesamples, t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0, per_param.sigma_cutoff);
+	}
+	// Limited harmonic summing
 	Do_LEHRMS(tempbuffer, t_nTimesamples, t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0, per_param.sigma_cutoff);
 	
 	free(tempbuffer);
