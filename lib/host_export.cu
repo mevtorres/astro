@@ -141,11 +141,11 @@ void Export_data_as_list(float *h_data, size_t primary_dimension, float prim_mul
 	
 	inner_sec_dim_shift = 0;
 	for(int i=0; i<(int) chunk_size.size(); i++){
-		sprintf(final_filename,"%s_%d.dat", base_filename, i);
+		sprintf(final_filename,"%s_%0.2f-%0.2f.dat", base_filename, ((float) inner_sec_dim_shift)*sec_mul + sec_add, ((float) (inner_sec_dim_shift+chunk_size[i]))*sec_mul + sec_add);
 		
 		for(size_t sec=0; sec<chunk_size[i]; sec++) {
 			for(size_t prim=0; prim<primary_dimension; prim++) {
-				h_data_to_export[3*(sec*primary_dimension + prim)] = ((float) sec)*sec_mul + sec_add;
+				h_data_to_export[3*(sec*primary_dimension + prim)] = ((float) (sec+inner_sec_dim_shift))*sec_mul + sec_add;
 				h_data_to_export[3*(sec*primary_dimension + prim)+1] = ((float) prim)*prim_mul + prim_add;
 				h_data_to_export[3*(sec*primary_dimension + prim)+2] = h_data[sec*primary_dimension + prim];
 			}
@@ -186,9 +186,9 @@ void Export_DD_data_as_list(float ***dedispersed_data, int nRanges, size_t max_n
 				}
 			}
 			
-			sprintf(final_filename, "%s_%0.2f-%0.2f", base_filename, dm_low[r], dm_high[r]);
+			sprintf(final_filename, "%s", base_filename);
 			
-			Export_data_as_list(local_data, nTimesamples, local_sampling_time, starting_time, nDMs, dm_step[r], dm_low[r], final_filename, DMs_per_file);
+			Export_data_as_list(local_data, nTimesamples, local_sampling_time, starting_time, nDMs, dm_step[r], dm_low[r], base_filename, DMs_per_file);
 			
 			delete[] local_data;
 		}
