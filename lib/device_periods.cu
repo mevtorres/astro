@@ -22,6 +22,9 @@
 // define to see debug info
 #define GPU_PERIODICITY_SEARCH_DEBUG
 
+// define to enable CPU periodicity algorithms
+#define CPU_PERIODICITY
+
 // define to reuse old MSD results to generate a new one (it means new MSD is calculated from more samples) (WORKING WITHIN SAME INBIN VALUE)
 //#define PS_REUSE_MSD_WITHIN_INBIN
 
@@ -721,6 +724,7 @@ void Periodicity_search(GPU_Memory_for_Periodicity_Search *gmem, Periodicity_par
 	
 	
 	//---------> Experimental harmonic summing
+	#ifdef CPU_PERIODICITY
 	//--------------> Power only
 	float *tempbuffer;
 	tempbuffer = (float *) malloc( (t_nTimesamples>>1)*t_nDMs_per_batch*sizeof(float));
@@ -738,7 +742,8 @@ void Periodicity_search(GPU_Memory_for_Periodicity_Search *gmem, Periodicity_par
 	Do_LEHRMS(tempbuffer, t_nTimesamples, t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0, per_param.sigma_cutoff);
 	
 	free(tempbuffer);
-	//---------> Experimental harmonic summing
+	#endif
+	//-------------------------------------------<
 	
 	
 	timer.Start();

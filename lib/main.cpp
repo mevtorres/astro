@@ -174,7 +174,15 @@ int main(int argc, char* argv[])
 
 	fclose(fp);
 
+	// deallocate host output
+	for(int i = 0; i < range; i++) {
+		for(int j = 0; j < ndms[i]; j++) {
+			free(output_buffer[i][j]);
+		}
+		free(output_buffer[i]);
+	}
 	free(output_buffer);
+	
 	free(t_processed);
 	free(dm_low);
 	free(dm_high);

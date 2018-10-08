@@ -272,7 +272,7 @@ void main_function
 		
 			checkCudaErrors(cudaGetLastError());
 			
-			if ( (enable_acceleration == 1) || (enable_periodicity == 1) || (analysis_debug ==1) ) {
+			if ( (enable_acceleration == 1) || (enable_periodicity == 1) || (analysis_debug ==1) || (output_dmt==1) ) {
 				// gpu_outputsize = ndms[dm_range] * ( t_processed[dm_range][t] ) * sizeof(float);
 				//save_data(d_output, out_tmp, gpu_outputsize);
 
@@ -285,13 +285,6 @@ void main_function
 			//	save_data(d_output, &output_buffer[dm_range][0][((long int)inc)/inBin[dm_range]], gpu_outputsize);
 			}
 
-			if (output_dmt == 1)
-			{
-				//for (int k = 0; k < ndms[dm_range]; k++)
-				//	write_output(dm_range, t_processed[dm_range][t], ndms[dm_range], gpu_memory, output_buffer[dm_range][k], gpu_outputsize, dm_low, dm_high);
-				//write_output(dm_range, t_processed[dm_range][t], ndms[dm_range], gpu_memory, out_tmp, gpu_outputsize, dm_low, dm_high);
-			}
-			
 			checkCudaErrors(cudaGetLastError());
 			
 			if (enable_analysis == 1) {
@@ -350,18 +343,18 @@ void main_function
 	//free(out_tmp);
 	free(input_buffer);
 	
-	#ifdef EXPORT_DD_DATA
+	if (output_dmt == 1){
 		size_t DMs_per_file;
 		int *ranges_to_export;
 		ranges_to_export = new int[range];
 		for(int f=0; f<range; f++) ranges_to_export[f]=1;
 		printf("\n\n");
 		printf("Exporting dedispersion data...\n");
-		DMs_per_file = Calculate_sd_per_file_from_file_size(1000, inc, 1);
+		DMs_per_file = Calculate_sd_per_file_from_file_size(1000/3, inc, 1);
 		printf("  DM per file: %d;\n", DMs_per_file);
-		Export_DD_data(range, output_buffer, inc, ndms, inBin, dm_low, dm_high, dm_step, "DD_data", ranges_to_export, DMs_per_file);
+		Export_DD_data_as_list(output_buffer, range, inc, ndms, inBin, dm_low, dm_high, dm_step, tsamp_original, 0, "DD_data", ranges_to_export, DMs_per_file);
 		delete[] ranges_to_export;
-	#endif
+	}
 
 	double time_processed = ( tstart_local ) / tsamp_original;
 	double dm_t_processed = time_processed * total_ndms;

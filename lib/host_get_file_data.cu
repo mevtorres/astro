@@ -136,7 +136,7 @@ void get_file_data(FILE **fp, int *nchans, int *nsamples, int *nsamp, int *nifs,
 		printf("\nERROR!! Failed to seek to end of data file\n");
 		exit(1);
 	}
-	size_t exp_total_data = ftell(*fp);
+	long int exp_total_data = ftell(*fp);
 	if (exp_total_data == -1) {
 		printf("\nERROR!! Failed to seek to end of data file\n");
 		exit(1);

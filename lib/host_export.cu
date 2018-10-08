@@ -8,7 +8,6 @@ size_t Calculate_sd_per_file_from_file_size(size_t size_in_MB, size_t primary_di
 	return(sd_per_file);
 }
 
-
 void Export_DD_data(int range, float ***dedispersed_data, size_t max_nTimesamples, int *ndms, int *inBin, float *dm_low, float *dm_high, float *dm_step, const char *base_filename, int *ranges_to_export, int DMs_per_file) {
 	char final_filename[200];
 	
@@ -68,7 +67,6 @@ void Export_DD_data(int range, float ***dedispersed_data, size_t max_nTimesample
 		}
 	}
 }
-
 
 void Export_data_raw(float *h_data, size_t primary_dimension, size_t secondary_dimension, const char *base_filename, int sd_per_file) {
 	char final_filename[200];
@@ -168,6 +166,34 @@ void Export_data_as_list(float *h_data, size_t primary_dimension, float prim_mul
 	delete [] h_data_to_export;
 }
 
+void Export_DD_data_as_list(float ***dedispersed_data, int nRanges, size_t max_nTimesamples, int *ndms, int *inBin, float *dm_low, float *dm_high, float *dm_step, float sampling_time, float starting_time, const char *base_filename, int *ranges_to_export, int DMs_per_file) {
+	char final_filename[200];
+	
+	for(int r=0; r<nRanges; r++){
+		if(ranges_to_export[r]) {
+			size_t nTimesamples = max_nTimesamples/inBin[r];
+			size_t nDMs = ndms[r];
+			float local_sampling_time = sampling_time*inBin[r];
+			size_t export_size = nTimesamples*nDMs;
+			if(DMs_per_file<0) DMs_per_file = (int) nDMs;
+			
+			float *local_data;
+			local_data = new float[export_size];
+
+			for(size_t d=0; d<nDMs; d++) {
+				for(size_t t=0; t<nTimesamples; t++) {
+					local_data[d*nTimesamples + t] = dedispersed_data[r][d][t];
+				}
+			}
+			
+			sprintf(final_filename, "%s_%0.2f-%0.2f", base_filename, dm_low[r], dm_high[r]);
+			
+			Export_data_as_list(local_data, nTimesamples, local_sampling_time, starting_time, nDMs, dm_step[r], dm_low[r], final_filename, DMs_per_file);
+			
+			delete[] local_data;
+		}
+	}
+}
 
 
 
