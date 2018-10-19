@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <vector>
 #include <omp.h>
+#include <sys/time.h>
+#include <unistd.h>
 
 class General_HRMS {
 public:
@@ -667,8 +669,12 @@ void Exp_HRMS(){
 void Do_PHRMS(float *input, size_t nTimesamples, size_t nDMs, size_t dm_shift, int nHarmonics, float dm_step, float dm_low, float dm_high, float sampling_time, float mod, float sigma_cutoff){	
 	//---------------------------------> Harmonic summing
 	size_t nSamples = (nTimesamples>>1);
+	double time_start, execution_time;
 	Point_HRMS PHRMS(nHarmonics, nDMs, nSamples);
+	time_start = omp_get_wtime();
 	PHRMS.Do_HRMS(input);
+	execution_time = omp_get_wtime() - time_start;
+	printf("PHRMS time: %f s;\n", execution_time);
 	
 	//---------> Thresholding, processing and export
 	std::vector<float> candidate_list;
@@ -686,8 +692,12 @@ void Do_PHRMS(float *input, size_t nTimesamples, size_t nDMs, size_t dm_shift, i
 void Do_SHRMS(float *input, size_t nTimesamples, size_t nDMs, size_t dm_shift, int nHarmonics, float dm_step, float dm_low, float dm_high, float sampling_time, float mod, float sigma_cutoff){
 	//---------------------------------> Harmonic summing
 	size_t nSamples = (nTimesamples>>1);
+	double time_start, execution_time;
 	AlternativeSuper_HRMS ASHRMS(nHarmonics, nDMs, nSamples);
+	time_start = omp_get_wtime();
 	ASHRMS.Do_HRMS(input);
+	execution_time = omp_get_wtime() - time_start;
+	printf("SHRMS time: %f s;\n", execution_time);
 	
 	//---------> Thresholding, processing and export
 	std::vector<float> candidate_list;
@@ -705,8 +715,12 @@ void Do_SHRMS(float *input, size_t nTimesamples, size_t nDMs, size_t dm_shift, i
 void Do_EHRMS(float *input, size_t nTimesamples, size_t nDMs, size_t dm_shift, int nHarmonics, float dm_step, float dm_low, float dm_high, float sampling_time, float mod, float sigma_cutoff){
 	//---------------------------------> Harmonic summing
 	size_t nSamples = (nTimesamples>>1);
+	double time_start, execution_time;
 	Exhaustive_HRMS EHRMS(nHarmonics, nDMs, nSamples);
+	time_start = omp_get_wtime();
 	EHRMS.Do_HRMS(input);
+	execution_time = omp_get_wtime() - time_start;
+	printf("EHRMS time: %f s;\n", execution_time);
 	
 	//---------> Thresholding, processing and export
 	std::vector<float> candidate_list;
@@ -724,8 +738,12 @@ void Do_EHRMS(float *input, size_t nTimesamples, size_t nDMs, size_t dm_shift, i
 void Do_LEHRMS(float *input, size_t nTimesamples, size_t nDMs, size_t dm_shift, int nHarmonics, float dm_step, float dm_low, float dm_high, float sampling_time, float mod, float sigma_cutoff){
 	//---------------------------------> Harmonic summing
 	size_t nSamples = (nTimesamples>>1);
+	double time_start, execution_time;
 	LimitedExhaustive_HRMS LEHRMS(nHarmonics, nDMs, nSamples);
+	time_start = omp_get_wtime();
 	LEHRMS.Do_HRMS(input);
+	execution_time = omp_get_wtime() - time_start;
+	printf("EHRMS time: %f s;\n", execution_time);
 	
 	//---------> Thresholding, processing and export
 	std::vector<float> candidate_list;
