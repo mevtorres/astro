@@ -1,4 +1,4 @@
-#include <omp.h>
+//#include <omp.h>
 #include <stdio.h>
 #include "headers/params.h"
 #include "device_set_stretch_kernel.cu"

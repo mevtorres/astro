@@ -47,6 +47,7 @@
 #define TBSIZEY 1
 #define PTBSIZEX 64
 #define PTBSIZEY 1
+//custom fft params (K. Adamek)
 
 
 // for corner turn in shared memory corner_turn_SM(...)
@@ -70,14 +71,6 @@
 #define PPF_L1_THREADS_PER_BLOCK 256
 #define PPF_L1_SPECTRA_PER_BLOCK 5
 
-// TITAN V
-//#define UNROLLS 4
-//#define SNUMREG 16
-//#define SDIVINT 8
-//#define SDIVINDM 60
-//#define SFDIVINDM 60.0f
-
-// Ussual
 #define UNROLLS 8
 #define SNUMREG 8
 #define SDIVINT 14

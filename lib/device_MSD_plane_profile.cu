@@ -440,13 +440,14 @@ void MSD_Interpolate_values(float *d_MSD_interpolated, float *d_MSD_DIT, std::ve
 //	h_MSD_interpolated = new float[nWidths*MSD_INTER_SIZE];
 
 	// adding memory for the interpolate kernel
-	int MSD_DIT_size = h_boxcar_widths->size();
+	int MSD_DIT_size = h_MSD_DIT_widths->size();
 	int *d_MSD_DIT_widths;
 	int *d_boxcar;
+
 	checkCudaErrors(cudaMalloc((void **) &d_MSD_DIT_widths, sizeof(int)*MSD_DIT_size));
-        checkCudaErrors(cudaMemcpyAsync(d_MSD_DIT_widths, &h_MSD_DIT_widths->operator[](0), sizeof(int)*MSD_DIT_size,cudaMemcpyHostToDevice));
+        checkCudaErrors(cudaMemcpy(d_MSD_DIT_widths, &h_MSD_DIT_widths->operator[](0), sizeof(int)*MSD_DIT_size,cudaMemcpyHostToDevice));
 	cudaMalloc((void **) &d_boxcar, sizeof(int)*nWidths);
-        checkCudaErrors(cudaMemcpyAsync(d_boxcar, &h_boxcar_widths->operator[](0), sizeof(int)*nWidths,cudaMemcpyHostToDevice));
+        checkCudaErrors(cudaMemcpy(d_boxcar, &h_boxcar_widths->operator[](0), sizeof(int)*nWidths,cudaMemcpyHostToDevice));
 
 	
 //	checkCudaErrors(cudaMemcpy(h_MSD_DIT, d_MSD_DIT, nMSDs*MSD_RESULTS_SIZE*sizeof(float), cudaMemcpyDeviceToHost));
@@ -495,12 +496,12 @@ void MSD_Interpolate_values(float *d_MSD_interpolated, float *d_MSD_DIT, std::ve
 void Get_MSD_plane_profile_memory_requirements(size_t *MSD_profile_size_in_bytes, size_t *MSD_DIT_profile_size_in_bytes, size_t *workarea_size_in_bytes, size_t primary_dimension, size_t secondary_dimension, std::vector<int> *boxcar_widths) {
 	// temporary work area for decimations. We need 2*1/4 = 1/2.
 	size_t t_wsib = (primary_dimension*secondary_dimension*sizeof(float))/2;
-	
+
 	// temporary storage for MSD values of decimated input data
 	int max_boxcar_width = boxcar_widths->operator[](boxcar_widths->size()-1);
 	int nDecimations = ((int) floorf(log2f((float)max_boxcar_width))) + 2;
 	t_wsib = t_wsib + nDecimations*MSD_RESULTS_SIZE*sizeof(float);
-	
+
 	// temporary storage for calculation of MSD. We have to choose the maximum from all possible variants.
 	size_t decimated_pd = primary_dimension;
 	int max_nBlocks = 0;
@@ -549,7 +550,7 @@ void MSD_plane_profile(float *d_MSD_interpolated, float *d_input_data, float *d_
 		d_MSD_DIT = &workarea[datasize/2];
 		d_MSD_workarea = &workarea[datasize/2 + (nDecimations+1)*MSD_RESULTS_SIZE];
 	}
-	
+
 	cudaMemset((void*) d_MSD_DIT, 0, (nDecimations+1)*MSD_RESULTS_SIZE*sizeof(float));
 	
 	MSD_of_input_plane(d_MSD_DIT, &h_MSD_DIT_widths, d_input_data, d_MSD_DIT_previous, d_sudy, d_lichy, d_MSD_workarea, primary_dimension, secondary_dimension, nDecimations, max_boxcar_width, OR_sigma_multiplier, enable_outlier_rejection, high_memory, perform_continuous, total_time, dit_time, MSD_time);
