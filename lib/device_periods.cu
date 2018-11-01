@@ -741,6 +741,10 @@ void Periodicity_search(GPU_Memory_for_Periodicity_Search *gmem, Periodicity_par
 	// Limited harmonic summing
 	Do_LEHRMS(tempbuffer, t_nTimesamples, t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0, per_param.sigma_cutoff);
 	
+	Do_GEHRMS(tempbuffer, t_nTimesamples, t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0, per_param.sigma_cutoff);
+	
+	Do_PRHRMS(tempbuffer, t_nTimesamples, t_nDMs_per_batch, t_DM_shift, per_param.nHarmonics, dm_step, dm_low, dm_high, sampling_time, 1.0, per_param.sigma_cutoff);
+	
 	free(tempbuffer);
 	#endif
 	//-------------------------------------------<

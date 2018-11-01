@@ -104,9 +104,11 @@ public:
 	void Find_MSD_array(float *input){
 		printf("Starting MSD calculation\n");
 		if(mean_array!=NULL && stdev_array!=NULL && nHarmonics > 1) {
+			
 			float *tempdata;
 			tempdata = new float[nSamples*nDMs];
 			mean_array[0]=0; stdev_array[0]=0;
+			
 			
 			// First harmonic
 			printf("  h: 1; ");
@@ -122,6 +124,13 @@ public:
 			}
 			printf("\n");
 			delete[] tempdata;
+			/*
+			mean_array[0]=0; stdev_array[0]=0;
+			for(int h=1; h<=nHarmonics; h++){
+				mean_array[h]=0; stdev_array[h]=1*sqrt(h);
+			}
+			*/
+			
 		}
 		else {
 			printf("\nERROR!!!! in Find_MSD_array\n");
@@ -184,6 +193,7 @@ public:
 		int max_harmonics;
 		
 		printf("Harmonic summing...\n");
+		#pragma omp parallel for
 		for(size_t d=0; d<nDMs; d++){
 			for(size_t t=0; t<nSamples; t++){
 				HS = data[d*nSamples + t];
@@ -290,6 +300,7 @@ public:
 		DITpos = 0;
 		for(int h=2; h<=nHarmonics; h++){
 			size_t DIT_Samples = nSamples/h;
+			#pragma omp parallel for
 			for(size_t d=0; d<nDMs; d++){
 				maxDecimate(&DIT_data[DITpos + d*DIT_Samples], &data[d*nSamples], h, nSamples);
 			}
@@ -306,6 +317,7 @@ public:
 			}
 		}
 		MSD_Kahan(harmonics, nDMs, nSamples, 0, &local_mean[1], &local_StDev[1]);
+		//local_mean[1] = 0; local_StDev[1]=1;
 		printf("Mean: %f; sd: %f;\n", local_mean[1], local_StDev[1]);
 		for(size_t d=0; d<nDMs; d++){
 			for(size_t t=0; t<nSamples; t++) {
@@ -318,13 +330,16 @@ public:
 		DITpos = 0;
 		for(int h=2; h<=nHarmonics; h++){
 			size_t DIT_Samples = nSamples/h;
+			#pragma omp parallel for
 			for(size_t d=0; d<nDMs; d++){
 				for(size_t t=0; t<DIT_Samples; t++){
 					harmonics[d*nSamples + t] = harmonics[d*nSamples + t] + DIT_data[DITpos + d*DIT_Samples + t];
 				}
 			}
 			MSD_Kahan(harmonics, nDMs, DIT_Samples, 0, &local_mean[h], &local_StDev[h]);
+			//local_mean[h] = 0; local_StDev[h]=1*sqrt(h);
 			printf("Mean: %f; sd: %f;\n", local_mean[h], local_StDev[h]);
+			#pragma omp parallel for
 			for(size_t d=0; d<nDMs; d++){
 				for(size_t t=0; t<DIT_Samples; t++){
 					temp_SNR = (harmonics[d*nSamples + t] - local_mean[h])/(local_StDev[h]);
@@ -581,10 +596,10 @@ public:
 		Find_MSD_array(data);
 		
 		printf("Harmonic summing...\n");
+		#pragma omp parallel for
 		for(int d=0; d<nDMs; d++){
 			printf("|");
 			fflush(stdout);
-			//#pragma omp parallel for
 			for(int t=1; t<nSamples; t++){
 				float SNR = 0;
 				int SNR_width = 0;
@@ -618,7 +633,235 @@ public:
 //--------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------
 
+class GreedyExhaustive_HRMS:public General_HRMS {
+	// This calculates Exhaustive HRMS
+public:
+	float *result;
+	int *result_harmonics;
+	
+	GreedyExhaustive_HRMS(int t_nHarmonics, size_t t_nDMs, size_t t_nSamples){
+		result = new float[t_nDMs*t_nSamples];
+		result_harmonics = new int[t_nDMs*t_nSamples];
+		nHarmonics = t_nHarmonics;
+		nDMs = t_nDMs;
+		nSamples = t_nSamples;
+		mean = 0;
+		sd = 1;
+	}
+	
+	float find_max(float *input, size_t size, size_t *max_position){
+		float max=0;
+		if(size>0){
+			max = input[0]; *max_position = 0;
+			for(size_t f=0; f<size; f++){
+				if( input[f]>max ) { max = input[f]; *max_position=f;}
+			}
+		}
+		return(max);
+	}
+	
+	
+	void Perform_greedy_search(float *data, size_t t, size_t d, int nHarmonics, float *SNR, size_t *SNR_harmonic, size_t nSamples){
+		float *mHS; // maximum SNR value per harmonic
+		float *partial_sums;
+		float data_down, data_step;
+		int data_shift = 0;
+		float t_SNR = 0;
+		size_t t_SNR_harmonic = 0;
+		
+		partial_sums = new float[nHarmonics];
+		mHS = new float[nHarmonics];
+		
+		// 1st Harmonic
+		partial_sums[0] = data[d*nSamples + t];
+		
+		// creating higher harmonics
+		data_shift = 0;
+		for(int f=1; f<nHarmonics; f++){
+			// zeroth value
+			size_t pos = (f+1)*t + data_shift + 1;
+			if(pos<nSamples){
+				data_down = data[d*nSamples + (f+1)*t + data_shift];
+				data_step = data[d*nSamples + (f+1)*t + data_shift + 1];
+				if(data_step>data_down) {
+					data_shift++;
+					partial_sums[f] = partial_sums[f-1] + data_step;
+				}
+				else {
+					partial_sums[f] = partial_sums[f-1] + data_down;
+				}
+			}
+			else {
+				partial_sums[f] = partial_sums[f-1];
+			}
+		}
+		
+		// find highest SNR
+		for(int f=0; f<nHarmonics; f++) {
+			mHS[f] = (partial_sums[f]-mean_array[f+1])/(stdev_array[f+1]);
+		}
+		t_SNR = find_max(mHS, nHarmonics, &t_SNR_harmonic);
+		
+		delete[] mHS;
+		delete[] partial_sums;
+		
+		*SNR_harmonic = t_SNR_harmonic;
+		*SNR = t_SNR;
+	}
+	
+	void Do_HRMS(float *data){
+		printf("\n-----------------------------------------\n");
+		printf("---> Greedy exhaustive HRMS...\n");
+		
+		printf("Calculating MSD...\n");
+		Allocate_MSD_arrays();
+		Find_MSD_array(data);
+		
+		printf("Harmonic summing...\n");
+		#pragma omp parallel for
+		for(int d=0; d<nDMs; d++){
+			for(size_t t=0; t<nSamples; t++){
+				float SNR = 0;
+				size_t SNR_width = 0;
+				
+				Perform_greedy_search(data, t, d, nHarmonics, &SNR, &SNR_width, nSamples);
+				
+				result[d*nSamples + t] = SNR;
+				result_harmonics[d*nSamples + t] = SNR_width;
+			}
+		}
+		printf("------------------------------<\n");
+	}
+	
+	void Export(size_t fft_nSamples, double sampling_time, const char *filename){
+		double sampling_frequency = 1.0/sampling_time;
+		std::ofstream FILEOUT;
+		FILEOUT.open(filename);
+		for(size_t f=0; f<nSamples; f++){
+			FILEOUT << (((double) f)*sampling_frequency)/((double) fft_nSamples) << " " << result[f] << " " << result_harmonics[f] << std::endl;
+		}
+		FILEOUT.close();
+	}
+	
+	~GreedyExhaustive_HRMS(){
+		delete[] result;
+		delete[] result_harmonics;
+	}
+};
 
+//--------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------
+
+class Presto_HRMS:public General_HRMS {
+	// This selects a fundamental frequency index 'n' and add to it its multiples k*n so H_0=f[n]; H_1=f[n]+f[2*n]; H_2=f[n]+f[2*n]+f[3*n] => H_i=H_{i-1} + f[i*n];
+public:
+	float *result;
+	int *result_harmonics;
+	
+	Presto_HRMS(int t_nHarmonics, size_t t_nDMs, size_t t_nSamples){
+		result = new float[t_nDMs*t_nSamples];
+		result_harmonics = new int[t_nDMs*t_nSamples];
+		nHarmonics = t_nHarmonics;
+		nDMs = t_nDMs;
+		nSamples = t_nSamples;
+		mean = 0;
+		sd = 1;
+	}
+	
+	float find_max(float *input, size_t size, size_t *max_position){
+		float max=0;
+		if(size>0){
+			max = input[0]; *max_position = 0;
+			for(size_t f=0; f<size; f++){
+				if( input[f]>max ) { max = input[f]; *max_position=f;}
+			}
+		}
+		return(max);
+	}
+	
+	void Perform_presto_search(float *data, size_t t, size_t d, int nHarmonics, float *SNR, size_t *SNR_harmonic){
+		float *mHS; // maximum SNR value per harmonic
+		float *partial_sums;
+		float ps;
+		float t_SNR = 0;
+		size_t t_SNR_harmonic = 0;
+		
+		partial_sums = new float[nHarmonics];
+		mHS = new float[nHarmonics];
+		
+		// 1st Harmonic
+		partial_sums[0] = data[t];
+		
+		// creating higher harmonics
+		for(int i=1; i<nHarmonics; i++){
+			ps = data[d*nSamples + t];
+			partial_sums[i] = data[t];
+			for(int f=1; f<=i; f++){
+				int pos = t*(((double) f)/((double) i));
+				partial_sums[i] = partial_sums[i] + data[d*nSamples + pos];
+			}
+		}
+		
+		// find highest SNR
+		for(int f=0; f<nHarmonics; f++) {
+			mHS[f] = (partial_sums[f]-mean_array[f+1])/(stdev_array[f+1]);
+		}
+		t_SNR = find_max(mHS, nHarmonics, &t_SNR_harmonic);
+		
+		delete[] mHS;
+		delete[] partial_sums;
+		
+		*SNR_harmonic = t_SNR_harmonic;
+		*SNR = t_SNR;
+	}
+	
+	void Do_HRMS(float *data){
+		printf("\n-----------------------------------------\n");
+		printf("---> Greedy exhaustive HRMS...\n");
+		
+		printf("Calculating MSD...\n");
+		Allocate_MSD_arrays();
+		Find_MSD_array(data);
+		
+		printf("Harmonic summing...\n");
+		result[0] = 0;
+		result_harmonics[0] = 0;
+		#pragma omp parallel for
+		for(int d=0; d<nDMs; d++){
+			for(size_t t=1; t<nSamples; t++){
+				float SNR = 0;
+				size_t SNR_width = 0;
+				
+				Perform_presto_search(data, t, d, nHarmonics, &SNR, &SNR_width);
+				
+				result[d*nSamples + t] = SNR;
+				result_harmonics[d*nSamples + t] = SNR_width;
+			}
+		}
+		printf("------------------------------<\n");
+	}
+	
+	void Export(size_t fft_nSamples, double sampling_time, const char *filename){
+		double sampling_frequency = 1.0/sampling_time;
+		std::ofstream FILEOUT;
+		FILEOUT.open(filename);
+		for(size_t f=0; f<nSamples; f++){
+			FILEOUT << (((double) f)*sampling_frequency)/((double) fft_nSamples) << " " << result[f] << " " << result_harmonics[f] << std::endl;
+		}
+		FILEOUT.close();
+	}
+	
+	~Presto_HRMS(){
+
+	}
+};
+
+//--------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------
 
 
 void Exp_HRMS_Export(std::vector<float> *list, char *filename){
@@ -743,7 +986,7 @@ void Do_LEHRMS(float *input, size_t nTimesamples, size_t nDMs, size_t dm_shift, 
 	time_start = omp_get_wtime();
 	LEHRMS.Do_HRMS(input);
 	execution_time = omp_get_wtime() - time_start;
-	printf("EHRMS time: %f s;\n", execution_time);
+	printf("LEHRMS time: %f s;\n", execution_time);
 	
 	//---------> Thresholding, processing and export
 	std::vector<float> candidate_list;
@@ -754,6 +997,52 @@ void Do_LEHRMS(float *input, size_t nTimesamples, size_t nDMs, size_t dm_shift, 
 	printf("nCandidates after process: %zu;\n", candidate_list.size());
 	char filename[100];
 	sprintf(filename, "LEHRMS-dm_%.2f-%.2f.dat", dm_low + dm_shift*dm_step, dm_low + (dm_shift + nDMs)*dm_step);
+	printf("Filename: %s;\n", filename);
+	Exp_HRMS_Export(&candidate_list, filename);
+}
+
+void Do_GEHRMS(float *input, size_t nTimesamples, size_t nDMs, size_t dm_shift, int nHarmonics, float dm_step, float dm_low, float dm_high, float sampling_time, float mod, float sigma_cutoff){
+	//---------------------------------> Harmonic summing
+	size_t nSamples = (nTimesamples>>1);
+	double time_start, execution_time;
+	GreedyExhaustive_HRMS GEHRMS(nHarmonics, nDMs, nSamples);
+	time_start = omp_get_wtime();
+	GEHRMS.Do_HRMS(input);
+	execution_time = omp_get_wtime() - time_start;
+	printf("GEHRMS time: %f s;\n", execution_time);
+	
+	//---------> Thresholding, processing and export
+	std::vector<float> candidate_list;
+	printf("nCandidates before: %zu;\n", candidate_list.size());
+	Exp_HRMS_Threshold(&candidate_list, GEHRMS.result, GEHRMS.result_harmonics, sigma_cutoff, nSamples, nDMs, dm_shift);
+	printf("nCandidates after threshold: %zu;\n", candidate_list.size());
+	Exp_HRMS_Process(&candidate_list, nTimesamples, dm_step, dm_low, sampling_time, mod);
+	printf("nCandidates after process: %zu;\n", candidate_list.size());
+	char filename[100];
+	sprintf(filename, "GEHRMS-dm_%.2f-%.2f.dat", dm_low + dm_shift*dm_step, dm_low + (dm_shift + nDMs)*dm_step);
+	printf("Filename: %s;\n", filename);
+	Exp_HRMS_Export(&candidate_list, filename);
+}
+
+void Do_PRHRMS(float *input, size_t nTimesamples, size_t nDMs, size_t dm_shift, int nHarmonics, float dm_step, float dm_low, float dm_high, float sampling_time, float mod, float sigma_cutoff){
+	//---------------------------------> Harmonic summing
+	size_t nSamples = (nTimesamples>>1);
+	double time_start, execution_time;
+	Presto_HRMS PRHRMS(nHarmonics, nDMs, nSamples);
+	time_start = omp_get_wtime();
+	PRHRMS.Do_HRMS(input);
+	execution_time = omp_get_wtime() - time_start;
+	printf("PRHRMS time: %f s;\n", execution_time);
+	
+	//---------> Thresholding, processing and export
+	std::vector<float> candidate_list;
+	printf("nCandidates before: %zu;\n", candidate_list.size());
+	Exp_HRMS_Threshold(&candidate_list, PRHRMS.result, PRHRMS.result_harmonics, sigma_cutoff, nSamples, nDMs, dm_shift);
+	printf("nCandidates after threshold: %zu;\n", candidate_list.size());
+	Exp_HRMS_Process(&candidate_list, nTimesamples, dm_step, dm_low, sampling_time, mod);
+	printf("nCandidates after process: %zu;\n", candidate_list.size());
+	char filename[100];
+	sprintf(filename, "PRHRMS-dm_%.2f-%.2f.dat", dm_low + dm_shift*dm_step, dm_low + (dm_shift + nDMs)*dm_step);
 	printf("Filename: %s;\n", filename);
 	Exp_HRMS_Export(&candidate_list, filename);
 }

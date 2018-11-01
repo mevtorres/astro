@@ -9,4 +9,8 @@ void Do_EHRMS(float *input, size_t nTimesamples, size_t nDMs, size_t dm_shift, i
 
 void Do_LEHRMS(float *input, size_t nTimesamples, size_t nDMs, size_t dm_shift, int nHarmonics, float dm_step, float dm_low, float dm_high, float sampling_time, float mod, float sigma_cutoff);	
 
+void Do_GEHRMS(float *input, size_t nTimesamples, size_t nDMs, size_t dm_shift, int nHarmonics, float dm_step, float dm_low, float dm_high, float sampling_time, float mod, float sigma_cutoff);	
+
+void Do_PRHRMS(float *input, size_t nTimesamples, size_t nDMs, size_t dm_shift, int nHarmonics, float dm_step, float dm_low, float dm_high, float sampling_time, float mod, float sigma_cutoff);	
+
 #endif
