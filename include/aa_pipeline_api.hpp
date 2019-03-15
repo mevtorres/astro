@@ -11,7 +11,9 @@
 #include "aa_ddtr_strategy.hpp"
 #include "aa_analysis_plan.hpp"
 #include "aa_analysis_strategy.hpp"
+#include "aa_jn_strategy.hpp"
 #include "aa_periodicity_plan.hpp"
+#include "aa_jn_plan.hpp"
 #include "aa_periodicity_strategy.hpp"
 #include "aa_filterbank_metadata.hpp"
 #include "aa_device_info.hpp"
@@ -24,6 +26,7 @@
 #include "aa_permitted_pipelines_4_0.hpp"
 #include "aa_permitted_pipelines_5.hpp"
 #include "aa_permitted_pipelines_5_0.hpp"
+#include "aa_permitted_pipelines_jn.hpp"
 
 #include "aa_log.hpp"
 
@@ -256,6 +259,39 @@ namespace astroaccelerate {
       
       return true;
     }
+
+    bool bind(aa_jn_plan plan){
+      pipeline_ready = false;
+
+      //If a plan has already been supplied, return false and do nothing with the new plan
+      if(supplied_plans.find(aa_pipeline::component::jn) == supplied_plans.end()) {
+        return false;
+      }
+
+	//Does the pipeline actually need this plan?
+      if(required_plans.find(aa_pipeline::component::jn) != required_plans.end()) {
+        m_jn_plan = plan;
+        aa_jn_strategy jn_strategy(m_jn_plan);
+        if(jn_strategy.ready()) {
+          m_jn_strategy = std::move(jn_strategy);
+          m_all_strategy.push_back(&m_jn_strategy);
+        }
+        else {
+          return false;
+        }
+
+        //If the plan is valid then the supplied_plan becomes true 
+        supplied_plans.at(aa_pipeline::component::jn) = true;
+      }
+      else {
+        //The plan is not required, ignore.
+        return false;
+      }
+
+      return true;	
+
+    }
+
     
     /** \returns The aa_ddtr_strategy instance bound to the pipeline instance, or a trivial instance if a valid aa_ddtr_strategy does not yet exist. */
     aa_ddtr_strategy ddtr_strategy() {
@@ -392,6 +428,36 @@ namespace astroaccelerate {
         return empty_strategy;
       }
       aa_fdas_strategy empty_strategy;
+      return empty_strategy;
+    }
+
+ aa_jn_strategy jn_strategy() {
+      //Does the pipeline actually need this strategy?
+      if(required_plans.find(aa_pipeline::component::jn) != required_plans.end()) {
+        //It does need this strategy.
+        //Is it already computed?
+        if(m_jn_strategy.ready()) { //Return since it was already computed.                                                                                                                                                          
+          return m_jn_strategy;
+        }
+        else {
+          //jn_strategy was not yet computed, do it now.
+          aa_jn_strategy jn_strategy(m_jn_plan);
+          if(jn_strategy.ready()) {
+            m_jn_strategy = std::move(jn_strategy);
+            m_all_strategy.push_back(&m_jn_strategy);
+          }
+          else { //Tried to calculate fdas strategy, but failed.
+            aa_jn_strategy empty_strategy;
+            return empty_strategy;
+          }
+        }
+      }
+      else {
+        //The pipeline does not need this strategy
+        aa_jn_strategy empty_strategy;
+        return empty_strategy;
+      }
+      aa_jn_strategy empty_strategy;
       return empty_strategy;
     }
 
@@ -871,6 +937,50 @@ namespace astroaccelerate {
 	  }
 	}
       }
+	else if(m_requested_pipeline == aa_permitted_pipelines::pipeline_jn) {
+        if(m_pipeline_options.find(zero_dm) != m_pipeline_options.end()) {
+          if(m_pipeline_options.find(old_rfi) != m_pipeline_options.end()) {
+            //details contain zero_dm and old_rfi
+            m_runner = std::unique_ptr<aa_permitted_pipelines_jn<zero_dm,               use_old_rfi>>(new aa_permitted_pipelines_jn<zero_dm,               use_old_rfi>(m_ddtr_strategy, m_analysis_strategy, ptr_data_in));
+            is_pipeline_set_to_runner   = true;
+            LOG(log_level::notice, "Selected Pipeline jn with zero_dm, and old_rfi");
+          }
+          else {
+            //details contain zero_dm and do not contain old_rfi, so old_rfi is false
+            m_runner = std::unique_ptr<aa_permitted_pipelines_jn<zero_dm,               no_rfi>>(new aa_permitted_pipelines_jn<zero_dm,                    no_rfi>(m_ddtr_strategy, m_analysis_strategy, ptr_data_in));
+            is_pipeline_set_to_runner   = true;
+            LOG(log_level::notice, "Selected Pipeline jn with zero_dm, and no rfi");
+          }
+        }
+        else if(m_pipeline_options.find(zero_dm_with_outliers) != m_pipeline_options.end()) {
+          //details contain zero_dm_with_outliers
+          if(m_pipeline_options.find(old_rfi) != m_pipeline_options.end()) {
+            //details contain zero_dm_with_outliers and old_rfi
+            m_runner = std::unique_ptr<aa_permitted_pipelines_jn<zero_dm_with_outliers, use_old_rfi>>(new aa_permitted_pipelines_jn<zero_dm_with_outliers, use_old_rfi>(m_ddtr_strategy, m_analysis_strategy, ptr_data_in));
+            is_pipeline_set_to_runner   = true;
+            LOG(log_level::notice, "Selected Pipeline jn with zero_dm_with_outliers, and old_rfi");
+          }
+          else {
+            //details contain zero_dm_with_outliers and do not contain older_rfi, so old_rfi is false
+            m_runner = std::unique_ptr<aa_permitted_pipelines_jn<zero_dm_with_outliers, no_rfi>>(new aa_permitted_pipelines_jn<zero_dm_with_outliers, no_rfi>(m_ddtr_strategy, m_analysis_strategy, ptr_data_in));
+            is_pipeline_set_to_runner   = true;
+            LOG(log_level::notice, "Selected Pipeline jn with zero_dm_with_outliers, and no rfi");
+          }
+        }
+        else {
+          LOG(log_level::notice, "Neither zero_dm nor zero_dm_with_outliers were specified in the options list. Selection OFF.");
+          if(m_pipeline_options.find(old_rfi) != m_pipeline_options.end()) {
+            m_runner = std::unique_ptr<aa_permitted_pipelines_jn<off, use_old_rfi>>(new aa_permitted_pipelines_jn<off, use_old_rfi>(m_ddtr_strategy, m_analysis_strategy, ptr_data_in));
+            is_pipeline_set_to_runner   = true;
+            LOG(log_level::notice, "Selected Pipeline jn without zero_dm, and old_rfi");
+          }
+          else {
+            m_runner = std::unique_ptr<aa_permitted_pipelines_jn<off, no_rfi>>(new aa_permitted_pipelines_jn<off, no_rfi>(m_ddtr_strategy, m_analysis_strategy, ptr_data_in));
+            is_pipeline_set_to_runner   = true;
+            LOG(log_level::notice, "Selected Pipeline jn without zero_dm, and no rfi");
+          }
+        }
+      }
       else {
 	//Pipeline 0
       }
@@ -984,6 +1094,9 @@ namespace astroaccelerate {
 
     aa_fdas_plan                m_fdas_plan; /** The instance of this type that is currently bound to the aa_pipeline_api instance. */
     aa_fdas_strategy            m_fdas_strategy; /** The instance of this type that is currently bound to the aa_pipeline_api instance. */
+
+	aa_jn_plan 	m_jn_plan;
+	aa_jn_strategy 	m_jn_strategy;
     
     bool bound_with_raw_ptr; /** Flag to indicate whether the input data is bound via a raw pointer (true) or not (false). */
     bool pipeline_ready; /** Flag to indicate whether the pipeline is ready to execute (true) or not (false).  */

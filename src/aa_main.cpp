@@ -151,6 +151,11 @@ int main(int argc, char *argv[]) {
 			   msd_baseline_noise);
     pipeline_manager.bind(fdas_plan);
   }
+
+  if(pipeline.find(aa_pipeline::component::jn) != pipeline.end()) {
+    aa_jn_plan jn_plan;   
+    pipeline_manager.bind(jn_plan);
+  }
   
   for(size_t i = 0; i < ddtr_plan.range(); i++) {
     LOG(log_level::dev_debug, std::to_string(ddtr_plan.user_dm(i).low)

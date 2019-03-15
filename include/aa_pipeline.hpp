@@ -33,6 +33,7 @@ namespace astroaccelerate {
 				analysis,
 				periodicity,
 				fdas,
+				jn
     };
     
     /** \enum component_option
@@ -70,6 +71,9 @@ namespace astroaccelerate {
 	break;
       case aa_pipeline::component::periodicity:
 	return "periodicity";
+	break;
+      case aa_pipeline::component::jn:
+	return "jn";
 	break;
       default:
 	return "ERROR: Component name not found";

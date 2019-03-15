@@ -211,6 +211,8 @@ namespace astroaccelerate {
 	    flg.user_debug.push_back(aa_pipeline::debug::debug);
 	  if (strcmp(string, "analysis") == 0)
 	    m_pipeline.insert(aa_pipeline::component::analysis);
+	  if (strcmp(string, "jn") == 0)
+	    m_pipeline.insert(aa_pipeline::component::jn);
 	  if (strcmp(string, "periodicity") == 0)
 	    m_pipeline.insert(aa_pipeline::component::periodicity);
 	  if (strcmp(string, "acceleration") == 0)

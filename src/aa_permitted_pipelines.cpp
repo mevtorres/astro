@@ -11,5 +11,6 @@ namespace astroaccelerate {
   const aa_pipeline::pipeline aa_permitted_pipelines::pipeline4_0 = {aa_pipeline::component::dedispersion, aa_pipeline::component::fdas};
   const	aa_pipeline::pipeline aa_permitted_pipelines::pipeline5   = {aa_pipeline::component::dedispersion, aa_pipeline::component::analysis, aa_pipeline::component::periodicity, aa_pipeline::component::fdas};
   const aa_pipeline::pipeline aa_permitted_pipelines::pipeline5_0 = {aa_pipeline::component::dedispersion, aa_pipeline::component::periodicity, aa_pipeline::component::fdas};
+  const aa_pipeline::pipeline aa_permitted_pipelines::pipeline_jn   = {aa_pipeline::component::dedispersion, aa_pipeline::component::analysis, aa_pipeline::component::jn};
 
 } //namespace astroaccelerate
